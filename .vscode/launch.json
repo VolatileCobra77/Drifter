@@ -1,0 +1,15 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Launch Drifter",
+            "request": "launch",
+            "mainClass": "ca.volatilecobra.Drifter",
+            "osx": {
+                "vmArgs": "-XstartOnFirstThread -ea"
+            },
+            "vmArgs": "-ea"
+        }
+    ]
+}
