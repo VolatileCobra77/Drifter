@@ -7,7 +7,7 @@ plugins {
     id 'com.github.johnrengelman.shadow' version '7.1.2'
 }
 
-description = 'Drifter is a WIP MMO where you are stranded on a peice of driftwood, with nothing but a pair of goggles and your bare hands, fation tools and weapons to defend yourself from the horrors of the deep. You will encounter other Drifters along your journey, they can hurt you, negotiate trade! Engage in piracy! Take conquer the ocean and make it back to land, back home! DISCLAIMER: THIS GAME WAS INSPIRED BY RAFT AND SUBNAUTICA'
+description = 'Drifter is a WIP MMO where you are stranded on a peice of driftwood, with nothing but a pair of goggles and your bare hands, fation tools and weapons to defend yourself from the horrors of the deep. You will encounter other Drifters along your journey, they can hurt you, negotiate trade! Engage in piracy! Take conquer the ocean and make it back to land, back home!'
 
 shadowJar {
     archiveBaseName.set('Drifter')
