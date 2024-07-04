@@ -9,17 +9,19 @@ import com.jme3.bullet.control.RigidBodyControl;
 import com.jme3.input.KeyInput;
 import com.jme3.input.controls.ActionListener;
 import com.jme3.input.controls.KeyTrigger;
+import com.jme3.light.DirectionalLight;
 import com.jme3.material.Material;
-import com.jme3.math.ColorRGBA;
-import com.jme3.math.Plane;
-import com.jme3.math.Vector3f;
+import com.jme3.math.*;
 import com.jme3.renderer.RenderManager;
+import com.jme3.renderer.queue.RenderQueue;
 import com.jme3.scene.Geometry;
 import com.jme3.scene.Mesh;
 import com.jme3.scene.Node;
 import com.jme3.scene.Spatial;
+import com.jme3.scene.shape.Quad;
 import com.jme3.terrain.geomipmap.TerrainQuad;
 import com.jme3.ui.Picture;
+import com.jme3.util.SkyFactory;
 import com.jme3.water.*;
 import com.jme3.scene.control.Control;
 import com.jme3.scene.shape.Box;
@@ -43,6 +45,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
     private Container settingsMenu;
     private Picture background;
     private boolean statsOverlay = false, fpsOverlay = false;
+    private Geometry water;
 
 
     public Spatial raft;
@@ -108,6 +111,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
 
 
         background = new Picture("rocks.png");
+
         background.setHeight(settings.getHeight());
         background.setWidth(settings.getWidth());
         Material bgMat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
@@ -177,8 +181,46 @@ public class Drifter extends SimpleApplication implements ActionListener {
 
     }
 
+    public void setUpWater(Spatial mainScene){
+        // we create a water processor
+        SimpleWaterProcessor waterProcessor = new SimpleWaterProcessor(assetManager);
+        waterProcessor.setReflectionScene(mainScene);
+
+// we set the water plane
+        Vector3f waterLocation=new Vector3f(0,0,0);
+        waterProcessor.setPlane(new Plane(Vector3f.UNIT_Y, waterLocation.dot(Vector3f.UNIT_Y)));
+        viewPort.addProcessor(waterProcessor);
+
+// we set wave properties
+        waterProcessor.setWaterDepth(40);         // transparency of water
+        waterProcessor.setDistortionScale(0.05f); // strength of waves
+        waterProcessor.setWaveSpeed(0.05f);       // speed of waves
+
+// we define the wave size by setting the size of the texture coordinates
+        Quad quad = new Quad(400,400);
+        quad.scaleTextureCoordinates(new Vector2f(6f,6f));
+
+// we create the water geometry from the quad
+        water=new Geometry("water", quad);
+        water.setLocalRotation(new Quaternion().fromAngleAxis(-FastMath.HALF_PI, Vector3f.UNIT_X));
+        water.setLocalTranslation(-200, 0, 250);
+        water.setShadowMode(RenderQueue.ShadowMode.Receive);
+        water.setMaterial(waterProcessor.getMaterial());
+        water.scale(1,1,1);
+        rootNode.attachChild(water);
+    }
+
     @Override
     public void simpleInitApp() {
+
+        rootNode.attachChild(SkyFactory.createSky(assetManager,"Textures/rocks.png", SkyFactory.EnvMapType.SphereMap));
+
+        DirectionalLight sun = new DirectionalLight();
+        sun.setDirection(new Vector3f(-0.5f, -0.5f, -0.5f));
+        sun.setColor(ColorRGBA.White);
+
+        rootNode.addLight(sun);
+        viewPort.setBackgroundColor(ColorRGBA.White);
 
         GuiGlobals.initialize(this);
         setUpGuis();
@@ -215,13 +257,14 @@ public class Drifter extends SimpleApplication implements ActionListener {
 
         rootNode.attachChild(sphere);
         rootNode.attachChild(raft);
-        terrain.setLocalTranslation(new Vector3f(0,-30,0));
+        terrain.setLocalTranslation(new Vector3f(0,-50,0));
         rootNode.attachChild(terrain);
         bulletAppState.getPhysicsSpace().add(raftControl);
         bulletAppState.getPhysicsSpace().add(sphereControl);
         bulletAppState.getPhysicsSpace().add(player);
         terrain.addControl(new RigidBodyControl(0));
         bulletAppState.getPhysicsSpace().add(terrain);
+        setUpWater(terrain);
     }
 
     @Override

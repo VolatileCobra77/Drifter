@@ -81,7 +81,7 @@ public class TerrainGenerator {
 
 
 
-        terrain.setLocalTranslation(0, -125, 0);
+        terrain.setLocalTranslation(0, -1500, 0);
         terrain.setLocalScale(scale, 1, scale);
         terrain.setMaterial(terrainMat);
         TerrainLodControl control = new TerrainLodControl(terrain, camera);
