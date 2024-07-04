@@ -1,6 +1,7 @@
 package ca.volatilecobra;
 
 import com.jme3.app.SimpleApplication;
+import ca.volatilecobra.TerrainGenerator;
 import com.jme3.bullet.BulletAppState;
 import com.jme3.bullet.collision.shapes.*;
 import com.jme3.bullet.control.CharacterControl;
@@ -10,10 +11,15 @@ import com.jme3.input.controls.ActionListener;
 import com.jme3.input.controls.KeyTrigger;
 import com.jme3.material.Material;
 import com.jme3.math.ColorRGBA;
+import com.jme3.math.Plane;
 import com.jme3.math.Vector3f;
 import com.jme3.renderer.RenderManager;
 import com.jme3.scene.Geometry;
+import com.jme3.scene.Mesh;
+import com.jme3.scene.Node;
 import com.jme3.scene.Spatial;
+import com.jme3.terrain.geomipmap.TerrainQuad;
+import com.jme3.water.*;
 import com.jme3.scene.control.Control;
 import com.jme3.scene.shape.Box;
 import com.jme3.scene.shape.Sphere;
@@ -75,6 +81,9 @@ public class Drifter extends SimpleApplication implements ActionListener {
 
     @Override
     public void simpleInitApp() {
+        TerrainGenerator terrainGenerator = new TerrainGenerator(assetManager, cam);
+        TerrainQuad terrain = terrainGenerator.getTerrain();
+        terrain.scale(352, 25, 352);
         setUpKeys();
         BulletAppState bulletAppState = new BulletAppState();
         stateManager.attach(bulletAppState);
@@ -105,9 +114,13 @@ public class Drifter extends SimpleApplication implements ActionListener {
 
         rootNode.attachChild(sphere);
         rootNode.attachChild(raft);
+        terrain.setLocalTranslation(new Vector3f(0,-30,0));
+        rootNode.attachChild(terrain);
         bulletAppState.getPhysicsSpace().add(raftControl);
         bulletAppState.getPhysicsSpace().add(sphereControl);
         bulletAppState.getPhysicsSpace().add(player);
+        terrain.addControl(new RigidBodyControl(0));
+        bulletAppState.getPhysicsSpace().add(terrain);
     }
 
     @Override
