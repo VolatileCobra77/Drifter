@@ -19,11 +19,17 @@ import com.jme3.scene.Mesh;
 import com.jme3.scene.Node;
 import com.jme3.scene.Spatial;
 import com.jme3.terrain.geomipmap.TerrainQuad;
+import com.jme3.ui.Picture;
 import com.jme3.water.*;
 import com.jme3.scene.control.Control;
 import com.jme3.scene.shape.Box;
 import com.jme3.scene.shape.Sphere;
 import com.jme3.water.*;
+import com.simsilica.lemur.Button;
+import com.simsilica.lemur.Container;
+import com.simsilica.lemur.GuiGlobals;
+import com.simsilica.lemur.Label;
+import com.simsilica.lemur.style.BaseStyles;
 
 /**
  * This is the Main Class of your Game. It should boot up your game and do initial initialisation
@@ -31,13 +37,21 @@ import com.jme3.water.*;
  */
 public class Drifter extends SimpleApplication implements ActionListener {
 
+
+    private Container mainMenu;
+    private Container pauseMenu;
+    private Container settingsMenu;
+    private Picture background;
+    private boolean statsOverlay = false, fpsOverlay = false;
+
+
     public Spatial raft;
     public Spatial sphere;
     public CharacterControl player;
     public RigidBodyControl sphereControl;
     private boolean sphereMass = false;
     private String keyPressed = "";
-    private boolean forward = false, backward = false, left = false, right = false, up = false, down = false, underwater = false, lastTickUnderwater = underwater;
+    private boolean playerHasControl = false, forward = false, backward = false, left = false, right = false, up = false, down = false, underwater = false, lastTickUnderwater = underwater;
 
     final private Vector3f walkDir = new Vector3f();
     final private Vector3f camDir = new Vector3f();
@@ -52,6 +66,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
     }
 
     private void setUpKeys(){
+        inputManager.deleteMapping(SimpleApplication.INPUT_MAPPING_EXIT);
         inputManager.addMapping("forward", new KeyTrigger(KeyInput.KEY_W));
         inputManager.addMapping("backward", new KeyTrigger(KeyInput.KEY_S));
         inputManager.addMapping("left", new KeyTrigger(KeyInput.KEY_A));
@@ -59,12 +74,14 @@ public class Drifter extends SimpleApplication implements ActionListener {
         inputManager.addMapping("up", new KeyTrigger(KeyInput.KEY_SPACE));
         inputManager.addMapping("down", new KeyTrigger(KeyInput.KEY_C));
         inputManager.addMapping("down", new KeyTrigger(KeyInput.KEY_LSHIFT));
+        inputManager.addMapping("pause", new KeyTrigger(KeyInput.KEY_ESCAPE));
         inputManager.addListener(this, "forward");
         inputManager.addListener(this, "backward");
         inputManager.addListener(this, "left");
         inputManager.addListener(this, "right");
         inputManager.addListener(this, "up");
         inputManager.addListener(this, "down");
+        inputManager.addListener(this, "pause");
     }
     @Override
     public void onAction(String name, boolean isPressed, float tpf){
@@ -75,12 +92,96 @@ public class Drifter extends SimpleApplication implements ActionListener {
             case "right" -> right = isPressed;
             case "up" -> up = isPressed;
             case "down" -> down = isPressed;
+            case "pause" -> pauseGame();
         }
+
+    }
+    private void pauseGame(){
+        playerHasControl = false;
+        mainMenu.removeFromParent();
+        settingsMenu.removeFromParent();
+        guiNode.attachChild(background);
+        guiNode.attachChild(pauseMenu);
+    }
+
+    public void setUpGuis(){
+
+
+        background = new Picture("rocks.png");
+        background.setHeight(settings.getHeight());
+        background.setWidth(settings.getWidth());
+        Material bgMat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+        bgMat.setColor("Color", ColorRGBA.Black);
+        background.setMaterial(bgMat);
+        mainMenu = new Container();
+        mainMenu.setLocalTranslation(settings.getHeight()/2f, settings.getWidth()/2f, 0);
+        Label mainLabel = new Label("Main Menu");
+        Button startButton = new Button("Start");
+        startButton.addClickCommands(source -> {
+            playerHasControl = true;
+            mainMenu.removeFromParent();
+            background.removeFromParent();
+        });
+        mainMenu.addChild(mainLabel);
+        startButton.setLocalTranslation(mainMenu.getLocalTranslation().add(new Vector3f(0,-10,0)));
+        mainMenu.addChild(startButton);
+
+        guiNode.attachChild(mainMenu);
+
+        settingsMenu = new Container();
+        settingsMenu.setLocalTranslation(settings.getHeight()/2f, settings.getWidth()/2f, 0);
+        Button enableDevOverlayButton = new Button("Toggle Dev overlay");
+        enableDevOverlayButton.addClickCommands(source->{
+            statsOverlay = !statsOverlay;
+
+
+        });
+        enableDevOverlayButton.setLocalTranslation(settingsMenu.getLocalTranslation().add(new Vector3f(0,-10f,0)));
+        Button enableFpsOverlayButton = new Button("Toggle Fps overlay");
+        enableFpsOverlayButton.addClickCommands(source->{
+            fpsOverlay = !fpsOverlay;
+
+
+        });
+        enableFpsOverlayButton.setLocalTranslation(enableDevOverlayButton.getLocalTranslation().add(new Vector3f(0,-10f,0)));
+        Button backToPauseFromSettings = new Button("< Back to Pause Menu");
+        backToPauseFromSettings.addClickCommands(source->{
+            settingsMenu.removeFromParent();
+            guiNode.attachChild(pauseMenu);
+        });
+        settingsMenu.addChild(backToPauseFromSettings);
+        settingsMenu.addChild(enableFpsOverlayButton);
+        settingsMenu.addChild(enableDevOverlayButton);
+        backToPauseFromSettings.setLocalTranslation(enableFpsOverlayButton.getLocalTranslation().add(new Vector3f(0,-10f,0)));
+        pauseMenu = new Container();
+        pauseMenu.setLocalTranslation(settings.getWidth()/2f, settings.getHeight()/2f, 0);
+        Button resumeButton = new Button("Resume");
+        resumeButton.addClickCommands(source -> {
+            playerHasControl = true;
+            pauseMenu.removeFromParent();
+            background.removeFromParent();
+        });
+        Button settingsButton = new Button("Settings");
+        settingsButton.addClickCommands(source -> {
+            guiNode.attachChild(settingsMenu);
+            pauseMenu.removeFromParent();
+        });
+        Button quitButton = new Button("Quit");
+        quitButton.addClickCommands(source->{
+            this.stop();
+        });
+        pauseMenu.addChild(resumeButton);
+        pauseMenu.addChild(settingsButton);
+        pauseMenu.addChild(quitButton);
+        guiNode.attachChild(background);
 
     }
 
     @Override
     public void simpleInitApp() {
+
+        GuiGlobals.initialize(this);
+        setUpGuis();
         TerrainGenerator terrainGenerator = new TerrainGenerator(assetManager, cam);
         TerrainQuad terrain = terrainGenerator.getTerrain();
         terrain.scale(352, 25, 352);
@@ -125,16 +226,22 @@ public class Drifter extends SimpleApplication implements ActionListener {
 
     @Override
     public void simpleUpdate(float tpf) {
-        //this method will be called every game tick and can be used to make updates
-        if (player.getPhysicsLocation().y <=0){
-            underwater = true;
-        }else{
-            underwater = false;
-        }
-        if (lastTickUnderwater != underwater){
-            player.jump();
-        }
-        processPlayerInput();
+        setDisplayFps(fpsOverlay);
+        setDisplayStatView(statsOverlay);
+        if (playerHasControl){
+            inputManager.setCursorVisible(false);
+            if (player.getPhysicsLocation().y <= 0) {
+                underwater = true;
+            } else {
+                underwater = false;
+            }
+            if (lastTickUnderwater != underwater) {
+                player.jump();
+            }
+            processPlayerInput();
+        }else{inputManager.setCursorVisible(true);}
+
+        cam.setLocation(player.getPhysicsLocation());
         lastTickUnderwater = underwater;
     }
     private void processPlayerInput(){
@@ -175,7 +282,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
             }
         }
         player.setWalkDirection(walkDir);
-        cam.setLocation(player.getPhysicsLocation());
+
     }
     @Override
     public void simpleRender(RenderManager rm) {
