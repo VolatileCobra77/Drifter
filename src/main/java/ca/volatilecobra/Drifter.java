@@ -2,6 +2,7 @@ package ca.volatilecobra;
 
 import com.jme3.app.SimpleApplication;
 import ca.volatilecobra.TerrainGenerator;
+import ca.volatilecobra.CustomWaterGenerator;
 import com.jme3.bullet.BulletAppState;
 import com.jme3.bullet.collision.shapes.*;
 import com.jme3.bullet.control.CharacterControl;
@@ -20,6 +21,9 @@ import com.jme3.scene.Node;
 import com.jme3.scene.Spatial;
 import com.jme3.scene.shape.Quad;
 import com.jme3.terrain.geomipmap.TerrainQuad;
+import com.jme3.texture.Image;
+import com.jme3.texture.Texture;
+import com.jme3.texture.Texture2D;
 import com.jme3.ui.Picture;
 import com.jme3.util.SkyFactory;
 import com.jme3.water.*;
@@ -33,34 +37,34 @@ import com.simsilica.lemur.GuiGlobals;
 import com.simsilica.lemur.Label;
 import com.simsilica.lemur.style.BaseStyles;
 
-/**
- * This is the Main Class of your Game. It should boot up your game and do initial initialisation
- * Move your Logic into AppStates or Controls or other java classes
- */
+
 public class Drifter extends SimpleApplication implements ActionListener {
 
 
+    //initalize private variables
+    private float[] newData;
+    private Spatial waterGeom;
     private Container mainMenu;
     private Container pauseMenu;
     private Container settingsMenu;
     private Picture background;
     private boolean statsOverlay = false, fpsOverlay = false;
-    private Geometry water;
-
-
+    private CustomWaterGenerator customWaterGenerator;
+    private float movement = 0f;
+    private int tick;
+    private boolean sphereMass = false;
+    private String keyPressed = "";
+    private boolean playerHasControl = false, forward = false, backward = false, left = false, right = false, up = false, down = false, underwater = false, lastTickUnderwater = underwater;
+    //initalize final variables
+    final private Vector3f walkDir = new Vector3f();
+    final private Vector3f camDir = new Vector3f();
+    final private Vector3f camLeft = new Vector3f();
+    final private float playerMoveMult = 0.2f;
+    //initalize public variables
     public Spatial raft;
     public Spatial sphere;
     public CharacterControl player;
     public RigidBodyControl sphereControl;
-    private boolean sphereMass = false;
-    private String keyPressed = "";
-    private boolean playerHasControl = false, forward = false, backward = false, left = false, right = false, up = false, down = false, underwater = false, lastTickUnderwater = underwater;
-
-    final private Vector3f walkDir = new Vector3f();
-    final private Vector3f camDir = new Vector3f();
-    final private Vector3f camLeft = new Vector3f();
-    
-    final private float playerMoveMult = 0.2f;
 
     public static void main(String[] args) {
         Drifter app = new Drifter();
@@ -110,7 +114,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
     public void setUpGuis(){
 
 
-        background = new Picture("rocks.png");
+        background = new Picture("Background");
 
         background.setHeight(settings.getHeight());
         background.setWidth(settings.getWidth());
@@ -118,7 +122,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
         bgMat.setColor("Color", ColorRGBA.Black);
         background.setMaterial(bgMat);
         mainMenu = new Container();
-        mainMenu.setLocalTranslation(settings.getHeight()/2f, settings.getWidth()/2f, 0);
+        mainMenu.setLocalTranslation((settings.getHeight()/2f)-mainMenu.getSize().x, (settings.getWidth()/2f)-mainMenu.getSize().y, 0);
         Label mainLabel = new Label("Main Menu");
         Button startButton = new Button("Start");
         startButton.addClickCommands(source -> {
@@ -181,33 +185,14 @@ public class Drifter extends SimpleApplication implements ActionListener {
 
     }
 
-    public void setUpWater(Spatial mainScene){
-        // we create a water processor
-        SimpleWaterProcessor waterProcessor = new SimpleWaterProcessor(assetManager);
-        waterProcessor.setReflectionScene(mainScene);
-
-// we set the water plane
-        Vector3f waterLocation=new Vector3f(0,0,0);
-        waterProcessor.setPlane(new Plane(Vector3f.UNIT_Y, waterLocation.dot(Vector3f.UNIT_Y)));
-        viewPort.addProcessor(waterProcessor);
-
-// we set wave properties
-        waterProcessor.setWaterDepth(40);         // transparency of water
-        waterProcessor.setDistortionScale(0.05f); // strength of waves
-        waterProcessor.setWaveSpeed(0.05f);       // speed of waves
-
-// we define the wave size by setting the size of the texture coordinates
-        Quad quad = new Quad(400,400);
-        quad.scaleTextureCoordinates(new Vector2f(6f,6f));
-
-// we create the water geometry from the quad
-        water=new Geometry("water", quad);
-        water.setLocalRotation(new Quaternion().fromAngleAxis(-FastMath.HALF_PI, Vector3f.UNIT_X));
-        water.setLocalTranslation(-200, 0, 250);
-        water.setShadowMode(RenderQueue.ShadowMode.Receive);
-        water.setMaterial(waterProcessor.getMaterial());
-        water.scale(1,1,1);
-        rootNode.attachChild(water);
+    public void setUpWater(){
+        customWaterGenerator = new CustomWaterGenerator(new Vector2f(100,100), 0.05f, new Vector3f(1,0,1));
+        float[] heightmap = customWaterGenerator.generate();
+        Material waterMat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+        waterMat.setTexture("ColorMap", new Texture2D(customWaterGenerator.generateWaterTexture(heightmap)));
+        waterGeom = customWaterGenerator.draw(assetManager, heightmap, waterMat);
+        customWaterGenerator.setCenter((Geometry) waterGeom, player.getPhysicsLocation());
+        rootNode.attachChild(waterGeom); 
     }
 
     @Override
@@ -264,11 +249,25 @@ public class Drifter extends SimpleApplication implements ActionListener {
         bulletAppState.getPhysicsSpace().add(player);
         terrain.addControl(new RigidBodyControl(0));
         bulletAppState.getPhysicsSpace().add(terrain);
-        setUpWater(terrain);
+        setUpWater();
     }
 
     @Override
     public void simpleUpdate(float tpf) {
+        movement += 0.01f;
+//        waterGeom.removeFromParent();
+//
+//        newData = customWaterGenerator.regenerateMap(player.getPhysicsLocation(), new Vector2f(movement,movement));
+//        Material tex = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+//        tex.setTexture("ColorMap", new Texture2D(customWaterGenerator.generateWaterTexture(assetManager,newData)));
+//        waterGeom = customWaterGenerator.draw(assetManager, newData, tex);
+//        customWaterGenerator.setCenter((Geometry)waterGeom, player.getPhysicsLocation());
+//        rootNode.attachChild(waterGeom);
+        tick++;
+        if (tick >= 200){
+            //updateWater();
+            tick=0;
+        }
         setDisplayFps(fpsOverlay);
         setDisplayStatView(statsOverlay);
         if (playerHasControl){
