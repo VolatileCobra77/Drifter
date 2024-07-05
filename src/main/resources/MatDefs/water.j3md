@@ -1,0 +1,25 @@
+MaterialDef Water {
+    MaterialParameters {
+        Float g_Time
+        Float amplitude1
+        Float frequency1
+        Float phase1
+
+        Float amplitude2
+        Float frequency2
+        Float phase2
+
+        Float amplitude3
+        Float frequency3
+        Float phase3
+    }
+
+    Technique {
+        VertexShader GLSL100: Shaders/water.vert
+        FragmentShader GLSL100: Shaders/water.frag
+
+        WorldParameters {
+            WorldViewProjectionMatrix
+        }
+    }
+}

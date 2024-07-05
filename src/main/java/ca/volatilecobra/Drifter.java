@@ -36,6 +36,7 @@ import com.simsilica.lemur.Container;
 import com.simsilica.lemur.GuiGlobals;
 import com.simsilica.lemur.Label;
 import com.simsilica.lemur.style.BaseStyles;
+import com.jme3.audio.*;
 
 
 public class Drifter extends SimpleApplication implements ActionListener {
@@ -54,6 +55,16 @@ public class Drifter extends SimpleApplication implements ActionListener {
     private int tick;
     private boolean sphereMass = false;
     private String keyPressed = "";
+    //breaks Java for some reason, looking into it -VolatileCobra77
+//    private AudioNode underwater_scary = new AudioNode(assetManager, "Sounds/ambience/underwater_scary.wav", AudioData.DataType.Buffer);
+//    private AudioNode above_water_scary = new AudioNode(assetManager, "Sounds/ambience/Above_water_scary.wav", AudioData.DataType.Buffer);
+//    private AudioNode above_water_background_sound = new AudioNode(assetManager, "Sounds/background/above_water_background_sound.wav", AudioData.DataType.Buffer);
+//    private AudioNode calm_underwater = new AudioNode(assetManager, "Sounds/background/calm_underwater.wav", AudioData.DataType.Buffer);
+//    private AudioNode intense_underwater_1 = new AudioNode(assetManager, "Sounds/background/intense_underwater-1.wav", AudioData.DataType.Buffer);
+//    private AudioNode intense_underwater_2 = new AudioNode(assetManager, "Sounds/background/intense_underwater-2.wav", AudioData.DataType.Buffer);
+//    private AudioNode whale = new AudioNode(assetManager, "Sounds/creature_sounds/whales/whale.wav", AudioData.DataType.Buffer);
+//    private AudioNode bigCreature = new AudioNode(assetManager, "Sounds/creature_sounds/misc/big_creature_coming_by.wav");
+
     private boolean playerHasControl = false, forward = false, backward = false, left = false, right = false, up = false, down = false, underwater = false, lastTickUnderwater = underwater;
     //initalize final variables
     final private Vector3f walkDir = new Vector3f();
@@ -192,11 +203,13 @@ public class Drifter extends SimpleApplication implements ActionListener {
         waterMat.setTexture("ColorMap", new Texture2D(customWaterGenerator.generateWaterTexture(heightmap)));
         waterGeom = customWaterGenerator.draw(assetManager, heightmap, waterMat);
         customWaterGenerator.setCenter((Geometry) waterGeom, player.getPhysicsLocation());
-        rootNode.attachChild(waterGeom); 
+        rootNode.attachChild(waterGeom);
     }
 
     @Override
     public void simpleInitApp() {
+
+
 
         rootNode.attachChild(SkyFactory.createSky(assetManager,"Textures/rocks.png", SkyFactory.EnvMapType.SphereMap));
 
@@ -265,7 +278,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
 //        rootNode.attachChild(waterGeom);
         tick++;
         if (tick >= 200){
-            //updateWater();
+
             tick=0;
         }
         setDisplayFps(fpsOverlay);
