@@ -1,22 +1,17 @@
 MaterialDef Water {
     MaterialParameters {
-        Float g_Time
-        Float amplitude1
-        Float frequency1
-        Float phase1
+        Vector3 iResolution
+        Float iTime
+        Float iTimeDelta
+        Float iFrameRate
+        Int iFrame
+        Vector4 iMouse
 
-        Float amplitude2
-        Float frequency2
-        Float phase2
-
-        Float amplitude3
-        Float frequency3
-        Float phase3
     }
 
     Technique {
-        VertexShader GLSL100: Shaders/water.vert
-        FragmentShader GLSL100: Shaders/water.frag
+        VertexShader GLSL130: Shaders/water.vert
+        FragmentShader GLSL130: Shaders/water.frag
 
         WorldParameters {
             WorldViewProjectionMatrix

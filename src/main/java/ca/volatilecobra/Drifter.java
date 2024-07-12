@@ -1,8 +1,6 @@
 package ca.volatilecobra;
 
 import com.jme3.app.SimpleApplication;
-import ca.volatilecobra.TerrainGenerator;
-import ca.volatilecobra.CustomWaterGenerator;
 import com.jme3.bullet.BulletAppState;
 import com.jme3.bullet.collision.shapes.*;
 import com.jme3.bullet.control.CharacterControl;
@@ -14,29 +12,20 @@ import com.jme3.light.DirectionalLight;
 import com.jme3.material.Material;
 import com.jme3.math.*;
 import com.jme3.renderer.RenderManager;
-import com.jme3.renderer.queue.RenderQueue;
-import com.jme3.scene.Geometry;
-import com.jme3.scene.Mesh;
-import com.jme3.scene.Node;
-import com.jme3.scene.Spatial;
-import com.jme3.scene.shape.Quad;
+import com.jme3.scene.*;
 import com.jme3.terrain.geomipmap.TerrainQuad;
-import com.jme3.texture.Image;
 import com.jme3.texture.Texture;
-import com.jme3.texture.Texture2D;
 import com.jme3.ui.Picture;
+import com.jme3.util.BufferUtils;
 import com.jme3.util.SkyFactory;
-import com.jme3.water.*;
-import com.jme3.scene.control.Control;
 import com.jme3.scene.shape.Box;
 import com.jme3.scene.shape.Sphere;
-import com.jme3.water.*;
 import com.simsilica.lemur.Button;
 import com.simsilica.lemur.Container;
 import com.simsilica.lemur.GuiGlobals;
 import com.simsilica.lemur.Label;
-import com.simsilica.lemur.style.BaseStyles;
-import com.jme3.audio.*;
+
+import java.util.ArrayList;
 
 
 public class Drifter extends SimpleApplication implements ActionListener {
@@ -44,6 +33,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
 
     //initalize private variables
     private float[] newData;
+    private ArrayList<bouyantObject> bouyantObjects;
     private Spatial waterGeom;
     private Container mainMenu;
     private Container pauseMenu;
@@ -55,6 +45,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
     private int tick;
     private boolean sphereMass = false;
     private String keyPressed = "";
+    public Material waterMaterial;
     //breaks Java for some reason, looking into it -VolatileCobra77
 //    private AudioNode underwater_scary = new AudioNode(assetManager, "Sounds/ambience/underwater_scary.wav", AudioData.DataType.Buffer);
 //    private AudioNode above_water_scary = new AudioNode(assetManager, "Sounds/ambience/Above_water_scary.wav", AudioData.DataType.Buffer);
@@ -101,6 +92,20 @@ public class Drifter extends SimpleApplication implements ActionListener {
         inputManager.addListener(this, "down");
         inputManager.addListener(this, "pause");
     }
+
+    public void AddBouyancy(RigidBodyControl Object, Vector3f Amplitude){
+
+        bouyantObjects.add(new bouyantObject(Object, Amplitude));
+    }
+
+    public void CheckBouyancy(){
+        for (bouyantObject Object: bouyantObjects){
+            if (Object.CheckFloating()){
+                Object.physicsControl.applyForce(Object.amplitude, new Vector3f(0,0,0));
+            }
+        }
+    }
+
     @Override
     public void onAction(String name, boolean isPressed, float tpf){
         switch(name){
@@ -196,22 +201,90 @@ public class Drifter extends SimpleApplication implements ActionListener {
 
     }
 
+    private Mesh createDeformedPlane(Vector3f size) {
+        int width = (int) size.x;
+        int depth = (int) size.z;
+        int height = (int) size.y;
+
+        Mesh mesh = new Mesh();
+
+        Vector3f[] vertices = new Vector3f[width * depth];
+        int[] indices = new int[(width - 1) * (depth - 1) * 6];
+
+        // Create vertices
+        int i = 0;
+        for (int z = 0; z < depth; z++) {
+            for (int x = 0; x < width; x++) {
+                for (int y = 0; y < height; y++) {
+                vertices[i] = new Vector3f(x, y, z);
+                i++;
+                }
+            }
+        }
+
+        // Create indices
+        int index = 0;
+        for (int z = 0; z < depth - 1; z++) {
+            for (int x = 0; x < width - 1; x++) {
+                int topLeft = (z * width) + x;
+                int topRight = topLeft + 1;
+                int bottomLeft = ((z + 1) * width) + x;
+                int bottomRight = bottomLeft + 1;
+
+                // First triangle
+                indices[index++] = topLeft;
+                indices[index++] = bottomLeft;
+                indices[index++] = topRight;
+
+                // Second triangle
+                indices[index++] = topRight;
+                indices[index++] = bottomLeft;
+                indices[index++] = bottomRight;
+            }
+        }
+
+        mesh.setBuffer(VertexBuffer.Type.Position, 3, BufferUtils.createFloatBuffer(vertices));
+        mesh.setBuffer(VertexBuffer.Type.Index, 3, BufferUtils.createIntBuffer(indices));
+        mesh.updateBound();
+
+        return mesh;
+    }
+
     public void setUpWater(){
-        customWaterGenerator = new CustomWaterGenerator(new Vector2f(100,100), 0.05f, new Vector3f(1,0,1));
-        float[] heightmap = customWaterGenerator.generate();
-        Material waterMat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
-        waterMat.setTexture("ColorMap", new Texture2D(customWaterGenerator.generateWaterTexture(heightmap)));
-        waterGeom = customWaterGenerator.draw(assetManager, heightmap, waterMat);
-        customWaterGenerator.setCenter((Geometry) waterGeom, player.getPhysicsLocation());
+        Mesh oceanMesh = new Box(1000, 0.002f, 1000);
+        waterGeom = new Geometry("Ocean", oceanMesh);
+        //waterGeom.rotate(-(float)Math.PI/2f,0,0);
+        waterGeom.setLocalTranslation(-500,0,-500);
+        waterMaterial = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+        waterMaterial.setTexture("ColorMap",  assetManager.loadTexture("Textures/WaterTransparent.png"));
+//        waterMaterial = new Material(assetManager, "MatDefs/water.j3md");
+//        waterMaterial.setVector3("iResolution", new Vector3f(settings.getWidth(),settings.getHeight(),0));
+//        waterMaterial.setFloat("iTime", 10);
+//        waterMaterial.setFloat("iTimeDelta", 0.01f);
+//        waterMaterial.setFloat("iFrameRate", 60);
+//        waterMaterial.setInt("iFrame", 1);
+//        waterMaterial.setVector4("iMouse", new Vector4f(0,0,0,0));
+
+
+        waterGeom.setMaterial(waterMaterial);
         rootNode.attachChild(waterGeom);
     }
 
     @Override
     public void simpleInitApp() {
 
+        bouyantObjects = new ArrayList<bouyantObject>();
+
+        Texture west = assetManager.loadTexture("Textures/Skybox/left.png");
+        Texture east = assetManager.loadTexture("Textures/Skybox/right.png");
+        Texture north = assetManager.loadTexture("Textures/Skybox/front.png");
+        Texture south = assetManager.loadTexture("Textures/Skybox/back.png");
+        Texture up = assetManager.loadTexture("Textures/Skybox/top.png");
+        Texture down = assetManager.loadTexture("Textures/Skybox/bottom.png");
 
 
-        rootNode.attachChild(SkyFactory.createSky(assetManager,"Textures/rocks.png", SkyFactory.EnvMapType.SphereMap));
+
+        rootNode.attachChild(SkyFactory.createSky(assetManager,west,east,north,south,up,down));
 
         DirectionalLight sun = new DirectionalLight();
         sun.setDirection(new Vector3f(-0.5f, -0.5f, -0.5f));
@@ -234,7 +307,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
         player.setJumpSpeed(20);
         player.setFallSpeed(20);
         player.setPhysicsLocation(new Vector3f(0, 10, 0));
-        Vector3f raftSize = new Vector3f(50f,0.2f,50f);
+        Vector3f raftSize = new Vector3f(5f,0.2f,5f);
         Material brown = new Material(assetManager,"Common/MatDefs/Misc/Unshaded.j3md");
         brown.setColor("Color", ColorRGBA.Brown);
         Material sphereTex = new Material(assetManager,"Common/MatDefs/Misc/Unshaded.j3md");
@@ -259,6 +332,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
         rootNode.attachChild(terrain);
         bulletAppState.getPhysicsSpace().add(raftControl);
         bulletAppState.getPhysicsSpace().add(sphereControl);
+        AddBouyancy(sphereControl, new Vector3f(0,20,0));
         bulletAppState.getPhysicsSpace().add(player);
         terrain.addControl(new RigidBodyControl(0));
         bulletAppState.getPhysicsSpace().add(terrain);
@@ -267,6 +341,8 @@ public class Drifter extends SimpleApplication implements ActionListener {
 
     @Override
     public void simpleUpdate(float tpf) {
+        CheckBouyancy();
+
         movement += 0.01f;
 //        waterGeom.removeFromParent();
 //
@@ -342,5 +418,22 @@ public class Drifter extends SimpleApplication implements ActionListener {
     @Override
     public void simpleRender(RenderManager rm) {
         //add render code here (if any)
+    }
+}
+class bouyantObject{
+    public RigidBodyControl physicsControl;
+    public Vector3f amplitude;
+    public boolean shouldFloat;
+
+    public bouyantObject(RigidBodyControl physicsControl, Vector3f amplitude){
+        this.physicsControl = physicsControl;
+        this.amplitude = amplitude;
+    }
+
+    public boolean CheckFloating(){
+
+        shouldFloat = physicsControl.getPhysicsLocation().y <= 0;
+        return shouldFloat;
+
     }
 }
