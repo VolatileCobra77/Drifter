@@ -1,15 +1,32 @@
 plugins {
     id 'java'
+    id 'com.github.johnrengelman.shadow' version '7.1.2'
 }
 
-group = 'ca.mrpickle'
-version = 'unspecified'
+group = 'ca.volatilecobra'
+version = '0.0.1'
+
+shadowJar {
+    archiveBaseName.set('Drifter-Server')
+    archiveClassifier.set('Beta')
+    archiveVersion.set('0.0.2')
+}
+
 
 repositories {
     mavenCentral()
 }
 
+jar.manifest.attributes('Main-Class': 'ca.volatilecobra.Server')
+
+
 dependencies {
+
+    implementation 'com.google.code.gson:gson:2.8.9'
+    implementation 'ch.qos.logback:logback-classic:1.2.0'
+    implementation 'org.joml:joml:1.10.4'
+    implementation 'org.jmonkeyengine:jme3-core:3.6.1-stable'
+    implementation 'org.java-websocket:Java-WebSocket:1.5.2'
     testImplementation platform('org.junit:junit-bom:5.10.0')
     testImplementation 'org.junit.jupiter:junit-jupiter'
 }

@@ -88,6 +88,65 @@ public class TerrainGenerator {
         terrain.addControl(control);
 
     }
+    public TerrainGenerator(List<Vector3f> heightmap, AssetManager assetManager, Camera camera  ) {
+        // Initialize terrain generator
+        int size = 512; // Size of the terrain
+        float scale = 0.25f;
+        float heightMult = 2f;
+
+        terrain = new TerrainQuad("terrain", 65, size + 1, null);
+        Material terrainMat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+        terrainMat.setTexture("ColorMap", assetManager.loadTexture("Textures/rocks.png"));
+
+//        Material matTerrain = new Material(assetManager, "Common/MatDefs/Terrain/Terrain.j3md");
+//
+//        matTerrain.setTexture("Alpha", assetManager.loadTexture("Textures/Heightmap.png"));
+//
+//        Texture normalRocks = assetManager.loadTexture(
+//                "Textures/rocks.png");
+//        normalRocks.setWrap(Texture.WrapMode.Repeat);
+//        matTerrain.setTexture("Tex1", normalRocks);
+//        matTerrain.setFloat("Tex1Scale", 64f);
+//
+//        Texture darkerRocks = assetManager.loadTexture(
+//                "Textures/rocks_2.png");
+//        darkerRocks.setWrap(Texture.WrapMode.Repeat);
+//        matTerrain.setTexture("Tex2", darkerRocks);
+//        matTerrain.setFloat("Tex1Scale", 64f);
+//
+//        Texture darkestRocks = assetManager.loadTexture(
+//                "Textures/rocks_2.png");
+//        darkestRocks.setWrap(Texture.WrapMode.Repeat);
+//        matTerrain.setTexture("Tex3", darkestRocks);
+//        matTerrain.setFloat("Tex1Scale", 64f);
+
+        // Generate image-based heightmap
+
+        // Apply heightmap to the terrain
+        for (Vector3f height : heightmap) {
+            terrain.adjustHeight(new Vector2f(height.x, height.y), height.z);
+        }
+//        AbstractHeightMap heightmap = null;
+//        Texture heightMapImage = assetManager.loadTexture(
+//                "Textures/Heightmap.png");
+//        heightmap = new ImageBasedHeightMap(heightMapImage.getImage());
+//        heightmap.load();
+
+//        float[] heightmapFloat = new float[size];
+//
+//        for (float height : heightmap.getHeightMap()){
+//            //heightmapFloat.
+//        }
+
+
+
+        terrain.setLocalTranslation(0, -1500, 0);
+        terrain.setLocalScale(scale, 1, scale);
+        terrain.setMaterial(terrainMat);
+        TerrainLodControl control = new TerrainLodControl(terrain, camera);
+        terrain.addControl(control);
+
+    }
 
     public TerrainQuad getTerrain() {
         return terrain;

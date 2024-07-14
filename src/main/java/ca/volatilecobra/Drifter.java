@@ -1,6 +1,12 @@
 package ca.volatilecobra;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import com.google.gson.reflect.TypeToken;
 import com.jme3.app.SimpleApplication;
+import com.jme3.asset.AssetManager;
 import com.jme3.bullet.BulletAppState;
 import com.jme3.bullet.collision.shapes.*;
 import com.jme3.bullet.control.CharacterControl;
@@ -13,6 +19,7 @@ import com.jme3.material.Material;
 import com.jme3.math.*;
 import com.jme3.renderer.RenderManager;
 import com.jme3.scene.*;
+import com.jme3.scene.control.Control;
 import com.jme3.terrain.geomipmap.TerrainQuad;
 import com.jme3.texture.Texture;
 import com.jme3.ui.Picture;
@@ -20,24 +27,36 @@ import com.jme3.util.BufferUtils;
 import com.jme3.util.SkyFactory;
 import com.jme3.scene.shape.Box;
 import com.jme3.scene.shape.Sphere;
-import com.simsilica.lemur.Button;
-import com.simsilica.lemur.Container;
-import com.simsilica.lemur.GuiGlobals;
-import com.simsilica.lemur.Label;
-
+import com.simsilica.lemur.*;
+import org.java_websocket.client.WebSocketClient;
+import org.java_websocket.handshake.ServerHandshake;
+import java.lang.reflect.Type;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
-
+import java.util.List;
 
 public class Drifter extends SimpleApplication implements ActionListener {
 
 
     //initalize private variables
+    private String name;
+    private Vector3f lastUpdateLocation;
+    private int id;
+    private List<player> players = new ArrayList<player>();
+    private List<Geometry> playerGeometrys  = new ArrayList<Geometry>();
+    private List<player> lastUpdatePlayers = new ArrayList<player>();
+    private List<Geometry> lastUpdatePlayerGeometrys = new ArrayList<Geometry>();
+    private Gson gson = new Gson();
+    private WebSocketClient client;
+    private BulletAppState bulletAppState;
     private float[] newData;
     private ArrayList<bouyantObject> bouyantObjects;
     private Spatial waterGeom;
     private Container mainMenu;
     private Container pauseMenu;
     private Container settingsMenu;
+    private Container connectionDialog;
     private Picture background;
     private boolean statsOverlay = false, fpsOverlay = false;
     private CustomWaterGenerator customWaterGenerator;
@@ -45,6 +64,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
     private int tick;
     private boolean sphereMass = false;
     private String keyPressed = "";
+    private List<Vector3f> GlobalHeightMap;
     public Material waterMaterial;
     //breaks Java for some reason, looking into it -VolatileCobra77
 //    private AudioNode underwater_scary = new AudioNode(assetManager, "Sounds/ambience/underwater_scary.wav", AudioData.DataType.Buffer);
@@ -56,7 +76,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
 //    private AudioNode whale = new AudioNode(assetManager, "Sounds/creature_sounds/whales/whale.wav", AudioData.DataType.Buffer);
 //    private AudioNode bigCreature = new AudioNode(assetManager, "Sounds/creature_sounds/misc/big_creature_coming_by.wav");
 
-    private boolean playerHasControl = false, forward = false, backward = false, left = false, right = false, up = false, down = false, underwater = false, lastTickUnderwater = underwater;
+    private boolean connected = false, setUp = false, playing = false, playerHasControl = false, forward = false, backward = false, left = false, right = false, up = false, down = false, underwater = false, lastTickUnderwater = underwater;
     //initalize final variables
     final private Vector3f walkDir = new Vector3f();
     final private Vector3f camDir = new Vector3f();
@@ -131,25 +151,72 @@ public class Drifter extends SimpleApplication implements ActionListener {
 
 
         background = new Picture("Background");
-
         background.setHeight(settings.getHeight());
         background.setWidth(settings.getWidth());
         Material bgMat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
         bgMat.setColor("Color", ColorRGBA.Black);
         background.setMaterial(bgMat);
+        Container errorMenu = new Container();
+        connectionDialog = new Container();
+        Label errorLabel = new Label("There Was an Error connecting to your session, ensure you have the right IP and port!");
+        TextField ipField = new TextField("Ip");
+        TextField portField = new TextField("Port");
+        TextField nameField = new TextField("name");
+        Button connect = new Button("Connect");
+        errorMenu.addChild(errorLabel);
+
+        connect.addClickCommands(source ->{
+            name = nameField.getText();
+            if (initalizeOnline(ipField.getText(), portField.getText())){
+                System.out.printf("Successfully Initalized a Websocket Connection to %s:%s \n", ipField.getText(), portField.getText());
+
+                mainMenu.removeFromParent();
+                background.removeFromParent();
+                playing = true;
+            }else{
+                guiNode.attachChild(errorMenu);
+                mainMenu.removeFromParent();
+            }
+
+        });
+        ipField.setLocalTranslation(0,0,0);
+        portField.setLocalTranslation(0,0,0);
+        connect.setLocalTranslation(0,0,0);
+        connectionDialog.setLocalTranslation(0,0,0);
+
+        connectionDialog.addChild(ipField);
+        connectionDialog.addChild(portField);
+        connectionDialog.addChild(connect);
         mainMenu = new Container();
         mainMenu.setLocalTranslation((settings.getHeight()/2f)-mainMenu.getSize().x, (settings.getWidth()/2f)-mainMenu.getSize().y, 0);
         Label mainLabel = new Label("Main Menu");
-        Button startButton = new Button("Start");
+        Button startButton = new Button("Start offline");
         startButton.addClickCommands(source -> {
+            initalizeOffline();
+            playing = true;
             playerHasControl = true;
             mainMenu.removeFromParent();
             background.removeFromParent();
         });
+        Button onlineStartButton = new Button("Start online");
+        onlineStartButton.addClickCommands(source ->{
+            guiNode.attachChild(connectionDialog);
+            mainMenu.removeFromParent();
+
+        });
         mainMenu.addChild(mainLabel);
         startButton.setLocalTranslation(mainMenu.getLocalTranslation().add(new Vector3f(0,-10,0)));
         mainMenu.addChild(startButton);
-
+        onlineStartButton.setLocalTranslation(startButton.getLocalTranslation().add(new Vector3f(0,-10,0)));
+//        mainMenu.addChild(onlineStartButton);\
+        nameField.setLocalTranslation(startButton.getLocalTranslation().add(new Vector3f(0,-10,0)));
+        mainMenu.addChild(nameField);
+        ipField.setLocalTranslation(nameField.getLocalTranslation().add(new Vector3f(0,-10,0)));
+        mainMenu.addChild(ipField);
+        portField.setLocalTranslation(ipField.getLocalTranslation().add(new Vector3f(0,-10,0)));
+        mainMenu.addChild(portField);
+        connect.setLocalTranslation(portField.getLocalTranslation().add(new Vector3f(0,-10,0)));
+        mainMenu.addChild(connect);
         guiNode.attachChild(mainMenu);
 
         settingsMenu = new Container();
@@ -193,6 +260,8 @@ public class Drifter extends SimpleApplication implements ActionListener {
         Button quitButton = new Button("Quit");
         quitButton.addClickCommands(source->{
             this.stop();
+            client.close();
+            System.exit(0);
         });
         pauseMenu.addChild(resumeButton);
         pauseMenu.addChild(settingsButton);
@@ -249,57 +318,133 @@ public class Drifter extends SimpleApplication implements ActionListener {
 
         return mesh;
     }
+    public void processServerMessage(String message){
+        JsonObject messageJson = JsonParser.parseString(message).getAsJsonObject();
+        //System.out.println("Received message: " + message);
+        // Process messages from the server
+        if (message.startsWith("{connection:")){
+            client.send("{terrainRequest:true}");
+            client.send(String.format("{player:%s, position: %s, inventory: %s}",name, gson.toJson(player.getPhysicsLocation()), gson.toJson(new ArrayList<List<Integer>>())));
+        }
+        if (message.startsWith("{heightMap:")) {
+            String jsonHeightMap = message.substring("{heightMap:".length(), message.length() - 1);
+            Type listType = new TypeToken<List<Vector3f>>() {}.getType();
+            List<Vector3f> heightMap = gson.fromJson(jsonHeightMap, listType);
+            // Handle the received height map
+            System.out.println("Received height map:");
 
-    public void setUpWater(){
-        Mesh oceanMesh = new Box(1000, 0.002f, 1000);
-        waterGeom = new Geometry("Ocean", oceanMesh);
-        //waterGeom.rotate(-(float)Math.PI/2f,0,0);
-        waterGeom.setLocalTranslation(-500,0,-500);
-        waterMaterial = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
-        waterMaterial.setTexture("ColorMap",  assetManager.loadTexture("Textures/WaterTransparent.png"));
-//        waterMaterial = new Material(assetManager, "MatDefs/water.j3md");
-//        waterMaterial.setVector3("iResolution", new Vector3f(settings.getWidth(),settings.getHeight(),0));
-//        waterMaterial.setFloat("iTime", 10);
-//        waterMaterial.setFloat("iTimeDelta", 0.01f);
-//        waterMaterial.setFloat("iFrameRate", 60);
-//        waterMaterial.setInt("iFrame", 1);
-//        waterMaterial.setVector4("iMouse", new Vector4f(0,0,0,0));
-
-
-        waterGeom.setMaterial(waterMaterial);
-        rootNode.attachChild(waterGeom);
+            GlobalHeightMap = heightMap;
+            connected = true;
+        }
+        if (message.startsWith("{players:")){
+            JsonArray playersJson = messageJson.get("players").getAsJsonArray();
+            Type listType = new TypeToken<List<player>>() {}.getType();
+            players = gson.fromJson(playersJson, listType);
+            for (player user : (List<player>)gson.fromJson(playersJson, listType)){
+                System.out.printf("Player %s at position %s\n", user.name, user.position);
+            }
+        }
+        if (message.startsWith("{id:")){
+            id = messageJson.get("id").getAsInt();
+            System.out.println("Received id: " + id);
+        }
     }
 
-    @Override
-    public void simpleInitApp() {
+    public void setUpOnlineStuff(List<Spatial> objects, List<Spatial> ores, List<Vector3f> heightmap, List<player> players, List<PhysicsObject> PhysicsObjects){
 
-        bouyantObjects = new ArrayList<bouyantObject>();
+        setUpSkybox();
+        TerrainGenerator terrainGenerator = null;
+        try {
+             terrainGenerator = new TerrainGenerator(heightmap, assetManager, cam);
+        } catch (Error e) {
+            client.close();
+            e.printStackTrace();
+            System.exit(1);
+        }
+        TerrainQuad terrain = terrainGenerator.getTerrain();
+        terrain.scale(352, 25, 352);
 
-        Texture west = assetManager.loadTexture("Textures/Skybox/left.png");
-        Texture east = assetManager.loadTexture("Textures/Skybox/right.png");
-        Texture north = assetManager.loadTexture("Textures/Skybox/front.png");
-        Texture south = assetManager.loadTexture("Textures/Skybox/back.png");
-        Texture up = assetManager.loadTexture("Textures/Skybox/top.png");
-        Texture down = assetManager.loadTexture("Textures/Skybox/bottom.png");
+        stateManager.attach(bulletAppState);
+        CapsuleCollisionShape playerControl = new CapsuleCollisionShape(1,2);
+        player = new CharacterControl(playerControl, 0.5f);
+        player.setGravity(30);
+        player.setJumpSpeed(20);
+        player.setFallSpeed(20);
+        player.setPhysicsLocation(new Vector3f(0, 10, 0));
+        Vector3f raftSize = new Vector3f(5f,0.2f,5f);
+        Material brown = new Material(assetManager,"Common/MatDefs/Misc/Unshaded.j3md");
+        brown.setColor("Color", ColorRGBA.Brown);
+        BoxCollisionShape raftCollider = new BoxCollisionShape(raftSize);
+        RigidBodyControl raftControl = new RigidBodyControl(raftCollider, 0f);
+        raft = new Geometry("raft", new Box(raftSize.x,raftSize.y,raftSize.z));
+        raft.setLocalTranslation(-1.5f, 0, -1.5f);
+        raft.addControl(raftControl);
+        //sphere = new Geometry("Sphere", new Sphere(66, 66, 1f));
+        SphereCollisionShape sphereCollider = new SphereCollisionShape(1f);
+        //sphereControl.setPhysicsLocation(raftControl.getPhysicsLocation().add(new Vector3f(0f,10f,0f)));
+        raft.setMaterial(brown);
+
+        for (PhysicsObject object:PhysicsObjects){
+            Material objMat = new Material(assetManager,"Common/MatDefs/Misc/Unshaded.j3md");
+            objMat.setTexture("ColorMap", assetManager.loadTexture("Textures/download.jpg"));
+            object.setUp(objMat);
+            rootNode.attachChild(object.spatial);
+        }
 
 
+        //rootNode.attachChild(sphere);
+        rootNode.attachChild(raft);
+        terrain.setLocalTranslation(new Vector3f(0,-50,0));
+        rootNode.attachChild(terrain);
+        bulletAppState.getPhysicsSpace().add(raftControl);
+        //bulletAppState.getPhysicsSpace().add(sphereControl);
+        //AddBouyancy(sphereControl, new Vector3f(0,20,0));
+        bulletAppState.getPhysicsSpace().add(player);
+        terrain.addControl(new RigidBodyControl(0));
+        bulletAppState.getPhysicsSpace().add(terrain);
+        setUpWater();
+    }
 
-        rootNode.attachChild(SkyFactory.createSky(assetManager,west,east,north,south,up,down));
+    public boolean initalizeOnline(String ip, String port){
+        try{
+            client = new WebSocketClient(new URI("ws://" + ip + ":" + port)) {
+                @Override
+                public void onOpen(ServerHandshake handshakedata) {
+                    System.out.println("Connected to server");
+                }
 
-        DirectionalLight sun = new DirectionalLight();
-        sun.setDirection(new Vector3f(-0.5f, -0.5f, -0.5f));
-        sun.setColor(ColorRGBA.White);
+                @Override
+                public void onMessage(String message) {
+                    processServerMessage(message);
+                }
 
-        rootNode.addLight(sun);
-        viewPort.setBackgroundColor(ColorRGBA.White);
+                @Override
+                public void onClose(int code, String reason, boolean remote) {
+                    System.out.println("Disconnected from server");
+                }
 
-        GuiGlobals.initialize(this);
-        setUpGuis();
+                @Override
+                public void onError(Exception ex) {
+                    ex.printStackTrace();
+                }
+            };
+            client.connect();
+            return client.isOpen();
+        } catch (URISyntaxException e){
+            e.printStackTrace();
+            return false;
+        }
+
+    }
+    public void initalizeOffline(){
+
+        setUpSkybox();
+
+
         TerrainGenerator terrainGenerator = new TerrainGenerator(assetManager, cam);
         TerrainQuad terrain = terrainGenerator.getTerrain();
         terrain.scale(352, 25, 352);
-        setUpKeys();
-        BulletAppState bulletAppState = new BulletAppState();
+
         stateManager.attach(bulletAppState);
         CapsuleCollisionShape playerControl = new CapsuleCollisionShape(1,2);
         player = new CharacterControl(playerControl, 0.5f);
@@ -339,11 +484,92 @@ public class Drifter extends SimpleApplication implements ActionListener {
         setUpWater();
     }
 
+    private void setUpSkybox() {
+        bouyantObjects = new ArrayList<bouyantObject>();
+
+        Texture west = assetManager.loadTexture("Textures/Skybox/left.png");
+        Texture east = assetManager.loadTexture("Textures/Skybox/right.png");
+        Texture north = assetManager.loadTexture("Textures/Skybox/front.png");
+        Texture south = assetManager.loadTexture("Textures/Skybox/back.png");
+        Texture up = assetManager.loadTexture("Textures/Skybox/top.png");
+        Texture down = assetManager.loadTexture("Textures/Skybox/bottom.png");
+
+
+        rootNode.attachChild(SkyFactory.createSky(assetManager,west,east,north,south,up,down));
+
+        DirectionalLight sun = new DirectionalLight();
+        sun.setDirection(new Vector3f(-0.5f, -0.5f, -0.5f));
+        sun.setColor(ColorRGBA.White);
+
+        rootNode.addLight(sun);
+        viewPort.setBackgroundColor(ColorRGBA.White);
+    }
+
+    public void setUpWater(){
+        Mesh oceanMesh = new Box(1000, 0.002f, 1000);
+        waterGeom = new Geometry("Ocean", oceanMesh);
+        //waterGeom.rotate(-(float)Math.PI/2f,0,0);
+        waterGeom.setLocalTranslation(-500,0,-500);
+        waterMaterial = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+        waterMaterial.setTexture("ColorMap",  assetManager.loadTexture("Textures/WaterTransparent.png"));
+//        waterMaterial = new Material(assetManager, "MatDefs/water.j3md");
+//        waterMaterial.setVector3("iResolution", new Vector3f(settings.getWidth(),settings.getHeight(),0));
+//        waterMaterial.setFloat("iTime", 10);
+//        waterMaterial.setFloat("iTimeDelta", 0.01f);
+//        waterMaterial.setFloat("iFrameRate", 60);
+//        waterMaterial.setInt("iFrame", 1);
+//        waterMaterial.setVector4("iMouse", new Vector4f(0,0,0,0));
+
+
+        waterGeom.setMaterial(waterMaterial);
+        rootNode.attachChild(waterGeom);
+    }
+
+    @Override
+    public void simpleInitApp() {
+        bulletAppState = new BulletAppState();
+        GuiGlobals.initialize(this);
+        setUpGuis();
+        setUpKeys();
+    }
+
+    private void syncWithServer(){
+        client.send(String.format("{player:%s, position:%s, inventory:%s, id:%s}", name ,gson.toJson(player.getPhysicsLocation()), gson.toJson(new ArrayList<List<Integer>>()), id));
+        client.send("getPlayers");
+    }
+
+
     @Override
     public void simpleUpdate(float tpf) {
-        CheckBouyancy();
+        if (connected && !setUp){
+            setUp = true;
+            setUpOnlineStuff(new ArrayList<>(),new ArrayList<>(),GlobalHeightMap,new ArrayList<>(), new ArrayList<>());
+            playing = true;
+            playerHasControl = true;
+            background.removeFromParent();
+        }
 
-        movement += 0.01f;
+        if (playing){
+
+            movement++;
+            CheckBouyancy();
+            for (Geometry geo:playerGeometrys){
+                geo.removeFromParent();
+            }
+            for (player user :players){
+                Geometry playerGeo = new Geometry(user.name, new Sphere(30,30,1));
+                Material playerMat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
+                playerMat.setColor("Color", ColorRGBA.Blue);
+                playerGeo.setMaterial(playerMat);
+                playerGeo.setLocalTranslation(user.position);
+                playerGeo.setName(user.name);
+                rootNode.attachChild(playerGeo);
+                playerGeometrys.add(playerGeo);
+            }
+            lastUpdatePlayerGeometrys = playerGeometrys;
+            lastUpdatePlayers = players;
+
+            movement += 0.01f;
 //        waterGeom.removeFromParent();
 //
 //        newData = customWaterGenerator.regenerateMap(player.getPhysicsLocation(), new Vector2f(movement,movement));
@@ -352,28 +578,36 @@ public class Drifter extends SimpleApplication implements ActionListener {
 //        waterGeom = customWaterGenerator.draw(assetManager, newData, tex);
 //        customWaterGenerator.setCenter((Geometry)waterGeom, player.getPhysicsLocation());
 //        rootNode.attachChild(waterGeom);
-        tick++;
-        if (tick >= 200){
+            tick++;
+            if (tick >= 200) {
 
-            tick=0;
-        }
-        setDisplayFps(fpsOverlay);
-        setDisplayStatView(statsOverlay);
-        if (playerHasControl){
-            inputManager.setCursorVisible(false);
-            if (player.getPhysicsLocation().y <= 0) {
-                underwater = true;
+                tick = 0;
+            }
+            setDisplayFps(fpsOverlay);
+            setDisplayStatView(statsOverlay);
+            if (playerHasControl) {
+                if (movement >=30 && connected){
+                    syncWithServer();
+
+                    movement = 0;
+                }
+                inputManager.setCursorVisible(false);
+                if (player.getPhysicsLocation().y <= 0) {
+                    underwater = true;
+                } else {
+                    underwater = false;
+                }
+                if (lastTickUnderwater != underwater) {
+                    player.jump();
+                }
+                processPlayerInput();
             } else {
-                underwater = false;
+                inputManager.setCursorVisible(true);
             }
-            if (lastTickUnderwater != underwater) {
-                player.jump();
-            }
-            processPlayerInput();
-        }else{inputManager.setCursorVisible(true);}
 
-        cam.setLocation(player.getPhysicsLocation());
-        lastTickUnderwater = underwater;
+            cam.setLocation(player.getPhysicsLocation());
+            lastTickUnderwater = underwater;
+        }
     }
     private void processPlayerInput(){
         if (underwater) {
@@ -435,5 +669,38 @@ class bouyantObject{
         shouldFloat = physicsControl.getPhysicsLocation().y <= 0;
         return shouldFloat;
 
+    }
+}
+class player{
+    public String name;
+    public Vector3f position;
+    public int id;
+    public player(String name, Vector3f position, int id){
+        this.name = name;
+        this.position = position;
+        this.id = id;
+    }
+}
+class PhysicsObject{
+    public Spatial spatial;
+    public CollisionShape collider;
+    public RigidBodyControl physicsControl;
+    public int id;
+    public PhysicsObject(Geometry geometry, RigidBodyControl physicsControl, CollisionShape collider, int id){
+        this.spatial = geometry;
+        this.physicsControl = physicsControl;
+        this.collider = collider;
+        this.id = id;
+    }
+    public PhysicsObject(Geometry geometry, CollisionShape collider, int id){
+        this.spatial = geometry;
+        this.physicsControl = new RigidBodyControl(collider);
+        this.collider = collider;
+        this.id = id;
+    }
+    public void setUp(Material material){
+        spatial.setMaterial(material);
+        physicsControl.setCollisionShape(collider);
+        spatial.addControl(physicsControl);
     }
 }

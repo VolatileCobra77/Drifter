@@ -44,6 +44,8 @@ dependencies {
     // You can read more about how to add dependencies here:
     //   https://docs.gradle.org/current/userguide/dependency_management.html#sec:how_to_declare_your_dependencies
 
+    implementation 'com.google.code.gson:gson:2.8.9'
+    implementation 'org.java-websocket:Java-WebSocket:1.5.2'
     implementation 'org.jmonkeyengine:jme3-core:' + jmonkeyengineVersion
     implementation 'org.jmonkeyengine:jme3-desktop:' + jmonkeyengineVersion
     runtimeOnly 'org.jmonkeyengine:jme3-jogg:' + jmonkeyengineVersion
