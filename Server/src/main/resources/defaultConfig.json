@@ -1,0 +1,38 @@
+{
+  "TerrainGenerator": {
+    "comment": "This is the settings for the terrainGenerator to generate terrain and ores",
+    "ores": {
+      "iron": {
+        "frequencyMult": 1,
+        "sizeMult": 1
+      }
+    },
+    "terrain": {
+      "seed": 1234,
+      "size": {
+        "x": 512,
+        "y": 512
+      },
+      "heightMult": 2,
+      "scale": 0.25
+    }
+  },
+  "Server": {
+    "comment": "This is the settings for the server, including max Players, IP, port, whitelist, blacklist",
+    "address": {
+      "ip": "localhost",
+      "port": 8080
+    },
+    "maxPlayers": 10,
+    "whitelist": {
+      "enabled": false,
+      "whitelistedUsers": []
+    },
+    "blacklist": {
+      "enabled": true,
+      "blacklistedUsers": []
+    },
+    "idlePingTimeout": 30000,
+    "pingCheckInterval": 5000
+  }
+}
