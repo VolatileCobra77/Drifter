@@ -743,7 +743,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
     }
     @Override
     public void simpleRender(RenderManager rm) {
-        //add render code here (if any)
+        // add render code here
     }
 }
 class bouyantObject{

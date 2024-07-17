@@ -5,8 +5,7 @@
 /*.dll
 /*.dylib
 /*.so
-/Server/src/main/resources/defaultConfig.json
-
+/Server/src/main/resources/personalConfig_DO_NOT_COMMIT.json
 #Although most of the .idea directory should not be committed there is a legitimate purpose for committing run configurations
 /.idea/
 !/.idea/runConfigurations/
