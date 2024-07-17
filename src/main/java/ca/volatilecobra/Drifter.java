@@ -17,10 +17,14 @@ import com.jme3.input.controls.KeyTrigger;
 import com.jme3.light.DirectionalLight;
 import com.jme3.material.Material;
 import com.jme3.math.*;
+import com.jme3.network.Network;
+import com.jme3.post.FilterPostProcessor;
+import com.jme3.post.filters.ColorOverlayFilter;
 import com.jme3.renderer.RenderManager;
 import com.jme3.scene.*;
 import com.jme3.scene.control.Control;
 import com.jme3.terrain.geomipmap.TerrainQuad;
+import com.jme3.terrain.heightmap.HeightMap;
 import com.jme3.texture.Texture;
 import com.jme3.ui.Picture;
 import com.jme3.util.BufferUtils;
@@ -30,9 +34,13 @@ import com.jme3.scene.shape.Sphere;
 import com.simsilica.lemur.*;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
+
+import java.io.*;
 import java.lang.reflect.Type;
-import java.net.URI;
-import java.net.URISyntaxException;
+import java.net.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -41,6 +49,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
 
     //initalize private variables
     private String name;
+    private FilterPostProcessor waterPostProcessor;
     private Vector3f lastUpdateLocation;
     private int id;
     private List<player> players = new ArrayList<player>();
@@ -57,6 +66,9 @@ public class Drifter extends SimpleApplication implements ActionListener {
     private Container pauseMenu;
     private Container settingsMenu;
     private Container connectionDialog;
+    private Container connecting;
+    private Label connectingText;
+    private ProgressBar connectingProgress;
     private Picture background;
     private boolean statsOverlay = false, fpsOverlay = false;
     private CustomWaterGenerator customWaterGenerator;
@@ -266,7 +278,12 @@ public class Drifter extends SimpleApplication implements ActionListener {
         pauseMenu.addChild(resumeButton);
         pauseMenu.addChild(settingsButton);
         pauseMenu.addChild(quitButton);
+
+
+
+
         guiNode.attachChild(background);
+
 
     }
 
@@ -324,9 +341,59 @@ public class Drifter extends SimpleApplication implements ActionListener {
         // Process messages from the server
         if (message.startsWith("{connection:")){
             client.send("{terrainRequest:true}");
-            client.send(String.format("{player:%s, position: %s, inventory: %s}",name, gson.toJson(player.getPhysicsLocation()), gson.toJson(new ArrayList<List<Integer>>())));
+            client.send(String.format("{player:%s, position: %s, inventory: %s}",name, gson.toJson(new Vector3f(0,0,0)), gson.toJson(new ArrayList<List<Integer>>())));
         }
-        if (message.startsWith("{heightMap:")) {
+        long totalBytes = 0;
+        if (message.startsWith("{heightmapURL:")){
+            System.out.println("Reading from URL: ");
+            String heightmapURL = messageJson.get("heightmapURL").getAsString();
+            System.out.print(heightmapURL +"\n");
+            HttpURLConnection connection = null;
+            int fileSize = 0;
+            try {
+                // Open connection to the URL
+                URL url = new URL(heightmapURL);
+                connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("GET");
+                connection.connect();
+
+                // Get the size of the file
+                fileSize = connection.getContentLength();
+                if (fileSize <= 0) {
+                    throw new IOException("Failed to get file size");
+                }
+            } catch (MalformedURLException e){
+                e.printStackTrace();
+            }catch (IOException e){
+                e.printStackTrace();
+            }
+            try (BufferedInputStream in = new BufferedInputStream(new URL(heightmapURL).openStream())) {
+                if(!Files.exists(Paths.get("Heightmap.json"))){
+                    FileOutputStream fileOut = new FileOutputStream("Heightmap.json");
+                    byte dataBuffer[] = new byte[1024];
+                    int bytesRead = 0;
+
+                    while ((bytesRead = in.read(dataBuffer, 0, 1024)) != -1) {
+                        fileOut.write(dataBuffer, 0, bytesRead);
+                        totalBytes += bytesRead;
+                        System.out.println("Downloaded " + totalBytes + " bytes of " + fileSize + ", " + (int) (((double) totalBytes / fileSize) * 100) + "% done");
+                    }
+                }else{
+                    System.out.println("Heightmap file already exists, using that. If you are unsure, go to the game directory and delete \"heightmap.json\"");
+                }
+
+                Type listType = new TypeToken<List<Vector3f>>() {}.getType();
+                GlobalHeightMap = gson.fromJson(new FileReader("Heightmap.json"), listType);
+
+            } catch (IOException e){
+                System.err.println("ERROR: An error occured while reading heightmap");
+                e.printStackTrace();
+                client.close();
+                guiNode.attachChild(background);
+                guiNode.attachChild(mainMenu);
+            }
+            connected = true;
+        } else if (message.startsWith("{heightMap:")) {
             String jsonHeightMap = message.substring("{heightMap:".length(), message.length() - 1);
             Type listType = new TypeToken<List<Vector3f>>() {}.getType();
             List<Vector3f> heightMap = gson.fromJson(jsonHeightMap, listType);
@@ -339,10 +406,15 @@ public class Drifter extends SimpleApplication implements ActionListener {
         if (message.startsWith("{players:")){
             JsonArray playersJson = messageJson.get("players").getAsJsonArray();
             Type listType = new TypeToken<List<player>>() {}.getType();
-            players = gson.fromJson(playersJson, listType);
-            for (player user : (List<player>)gson.fromJson(playersJson, listType)){
-                System.out.printf("Player %s at position %s\n", user.name, user.position);
+            List<player> tempPlayers = gson.fromJson(playersJson, listType);
+            for (player usr : tempPlayers) {
+                if (usr.id == id){
+                    tempPlayers.remove(usr);
+                }
             }
+            players = tempPlayers;
+
+            ((List<player>) gson.fromJson(playersJson, listType)).forEach(user -> System.out.printf("Player %s at position %s\n", user.name, user.position));
         }
         if (message.startsWith("{id:")){
             id = messageJson.get("id").getAsInt();
@@ -350,7 +422,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
         }
     }
 
-    public void setUpOnlineStuff(List<Spatial> objects, List<Spatial> ores, List<Vector3f> heightmap, List<player> players, List<PhysicsObject> PhysicsObjects){
+    public void setUpOnlineStuff(List<Spatial> objects, List<Spatial> ores, List<Vector3f> heightmap, List<PhysicsObject> PhysicsObjects){
 
         setUpSkybox();
         TerrainGenerator terrainGenerator = null;
@@ -444,6 +516,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
         TerrainGenerator terrainGenerator = new TerrainGenerator(assetManager, cam);
         TerrainQuad terrain = terrainGenerator.getTerrain();
         terrain.scale(352, 25, 352);
+        terrain.setLocalTranslation(0,0,0);
 
         stateManager.attach(bulletAppState);
         CapsuleCollisionShape playerControl = new CapsuleCollisionShape(1,2);
@@ -500,7 +573,6 @@ public class Drifter extends SimpleApplication implements ActionListener {
         DirectionalLight sun = new DirectionalLight();
         sun.setDirection(new Vector3f(-0.5f, -0.5f, -0.5f));
         sun.setColor(ColorRGBA.White);
-
         rootNode.addLight(sun);
         viewPort.setBackgroundColor(ColorRGBA.White);
     }
@@ -531,6 +603,8 @@ public class Drifter extends SimpleApplication implements ActionListener {
         GuiGlobals.initialize(this);
         setUpGuis();
         setUpKeys();
+        waterPostProcessor= new FilterPostProcessor(assetManager);
+        viewPort.addProcessor(waterPostProcessor);
     }
 
     private void syncWithServer(){
@@ -543,11 +617,20 @@ public class Drifter extends SimpleApplication implements ActionListener {
     public void simpleUpdate(float tpf) {
         if (connected && !setUp){
             setUp = true;
-            setUpOnlineStuff(new ArrayList<>(),new ArrayList<>(),GlobalHeightMap,new ArrayList<>(), new ArrayList<>());
+            try {
+                setUpOnlineStuff(new ArrayList<>(), new ArrayList<>(), GlobalHeightMap, new ArrayList<>());
+            } catch (Exception e) {
+                e.printStackTrace();
+                playing = false;
+                playerHasControl = false;
+                guiNode.attachChild(background);
+                guiNode.attachChild(mainMenu);
+            }
             playing = true;
             playerHasControl = true;
             background.removeFromParent();
         }
+
 
         if (playing){
 
@@ -594,8 +677,10 @@ public class Drifter extends SimpleApplication implements ActionListener {
                 inputManager.setCursorVisible(false);
                 if (player.getPhysicsLocation().y <= 0) {
                     underwater = true;
+
                 } else {
                     underwater = false;
+
                 }
                 if (lastTickUnderwater != underwater) {
                     player.jump();
@@ -647,6 +732,13 @@ public class Drifter extends SimpleApplication implements ActionListener {
             }
         }
         player.setWalkDirection(walkDir);
+        if (!lastTickUnderwater && underwater){
+            waterPostProcessor.addFilter(new ColorOverlayFilter(ColorRGBA.Cyan));
+            System.out.println("Underwater, adding post processor");
+        }else if (lastTickUnderwater && !underwater){
+            waterPostProcessor.removeAllFilters();
+            System.out.println("No Longer Underwater, removing post processor");
+        }
 
     }
     @Override

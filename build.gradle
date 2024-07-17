@@ -12,7 +12,7 @@ description = 'Drifter is a WIP MMO where you are stranded on a peice of driftwo
 shadowJar {
     archiveBaseName.set('Drifter')
     archiveClassifier.set('Beta')
-    archiveVersion.set('0.2.1')
+    archiveVersion.set('0.2.2')
 }
 
 java {

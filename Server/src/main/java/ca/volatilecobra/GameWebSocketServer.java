@@ -9,9 +9,7 @@ import org.java_websocket.WebSocket;
 import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.framing.Framedata;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileReader;
+import java.io.*;
 import java.lang.reflect.Type;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -28,6 +26,9 @@ public class GameWebSocketServer extends WebSocketServer {
     TerrainGenerator terrainGenerator;
     private List<player> players = new ArrayList<player>();
     private String configFilePath;
+    boolean useAWS;
+    AWSSync awsSync;
+    String heightmapURL;
 
     public GameWebSocketServer(InetSocketAddress address, String configFilePath) {
         super(address);
@@ -51,7 +52,15 @@ public class GameWebSocketServer extends WebSocketServer {
     public void onMessage(WebSocket conn, String message) {
         System.out.println(GREEN + "INFO: Recieved message from " + conn.getRemoteSocketAddress().getAddress().getHostAddress() +" Message contents: " + message + RESET);
         if (message.startsWith("{terrainRequest:")){
-            conn.send(String.format("{heightMap:%s}", gson.toJson(terrainGenerator.heightmap)));
+            System.out.println(GREEN + "INFO: Sending Heightmpa" + RESET);
+            if (useAWS){
+                conn.send(String.format("{heightmapURL:\"%s\"}", heightmapURL));
+            }else{
+                System.out.println(YELLOW + "WARNING: Sending raw Heightmap over network, this requires a lot of bandwidth" + RESET);
+                conn.send(String.format("{heightMap:%s}", gson.toJson(terrainGenerator.heightmap)));
+            }
+
+
         }else if (message.startsWith("{player:")){
             JsonObject json = JsonParser.parseString(message).getAsJsonObject();
             for (player user:players){
@@ -98,8 +107,7 @@ public class GameWebSocketServer extends WebSocketServer {
     public void onError(WebSocket conn, Exception ex) {
         ex.printStackTrace();
         if (conn != null) {
-            conn.send("CONNECTION ERROR");
-            conn.close(1);
+            //do nothing, because it breaks
         }
     }
 
@@ -144,27 +152,46 @@ public class GameWebSocketServer extends WebSocketServer {
         boolean blacklistEnabled = true;
         List<Integer> whitelist = new ArrayList<Integer>();
         List<Integer> blacklist = new ArrayList<Integer>();
+        String awsSecretKey = "";
+        String awsAccessKey = "";
+        String awsRegion = "";
+        String outputFilePath = "";
+        String awsBucketName = "";
         try {
-            //load Whole File
+            //load Main Objects
+            System.out.println(GREEN + "INFO: Loading main objects..." + RESET);
             JsonObject terrainGeneratorSettings = settingsFile.get("TerrainGenerator").getAsJsonObject();
             JsonObject serverSettings = settingsFile.get("Server").getAsJsonObject();
+            JsonObject awsSettings = settingsFile.get("AWS").getAsJsonObject();
+            System.out.println(GREEN + "INFO: Main Objects loaded" + RESET);
 
             //load TerrainGenerator specific settings
+            System.out.println(GREEN + "INFO: Loading TerrainGenerator settings" + RESET);
             JsonObject oreSettings = terrainGeneratorSettings.get("ores").getAsJsonObject();
             JsonObject terrainSettings = terrainGeneratorSettings.get("terrain").getAsJsonObject();
+            outputFilePath = terrainGeneratorSettings.get("outFile").getAsString();
+            System.out.println(GREEN + "INFO: TerrainGenerator settings loaded" + RESET);
 
             //repeat for all ores
+            System.out.println(GREEN + "INFO: Loading Ores..." + RESET);
             JsonObject ironOre = oreSettings.get("iron").getAsJsonObject();
+            System.out.println(GREEN + "INFO: Loading Iron" + RESET);
             ironOreFreq = ironOre.get("frequencyMult").getAsFloat();
             ironOreSize = ironOre.get("sizeMult").getAsFloat();
+            System.out.println(GREEN + "INFO: Iron Loaded" + RESET);
+            System.out.println(GREEN + "INFO: Ores Loaded" + RESET);
 
             //load Generation settings
+            System.out.println(GREEN + "INFO: Loading Generation settings..." + RESET);
             terrainSeed = terrainSettings.get("seed").getAsFloat();
             terrainHeightMult = terrainSettings.get("heightMult").getAsFloat();
             terrainSize = gson.fromJson(terrainSettings.get("size").getAsJsonObject(), Vector2f.class);
             terrainScale = terrainSettings.get("scale").getAsFloat();
 
+            System.out.println(GREEN + "INFO: Loaded Generation settings" + RESET);
+
             //load server Settings
+            System.out.println(GREEN + "INFO: Loading Server Settings..." + RESET);
             Type listType = new TypeToken<List<Integer>>() {}.getType();
             whitelist = gson.fromJson(serverSettings.get("whitelist").getAsJsonObject().get("whitelistedUsers").getAsJsonArray(), listType);
             whitelistEnabled = serverSettings.get("whitelist").getAsJsonObject().get("enabled").getAsBoolean();
@@ -173,19 +200,57 @@ public class GameWebSocketServer extends WebSocketServer {
             idlePingTimeout = serverSettings.get("idlePingTimeout").getAsFloat();
             maxPlayers = serverSettings.get("maxPlayers").getAsInt();
             pingCheckInterval = serverSettings.get("pingCheckInterval").getAsFloat();
+            System.out.println(GREEN + "INFO: Blacklisted users:" + blacklist.toString() + RESET);
+            System.out.println(GREEN + "INFO: Whitelisted users:" + whitelist.toString()+ RESET);
+            System.out.println(GREEN + "INFO: Using Blacklist:" + blacklistEnabled + RESET);
+            System.out.println(GREEN + "INFO: Using Whitelist:" + whitelistEnabled + RESET);
 
 
+            System.out.println(GREEN + "INFO: Checking for AWS environmnent" + RESET);
+            useAWS = awsSettings.get("useAws").getAsBoolean();
+            if (useAWS){
+                awsAccessKey = awsSettings.get("accessKey").getAsString();
+                awsRegion = awsSettings.get("region").getAsString();
+                awsSecretKey = awsSettings.get("secretKey").getAsString();
+                awsBucketName = awsSettings.get("bucketName").getAsString();
+            }else{
+                System.out.println(YELLOW + "WARNING: Not using AWS environment, this requires a lot of bandwidth" + RESET);
+            }
         }catch (NullPointerException e){
             System.err.println(RED + "ERROR: Incorrect JSON file, double check the file is correctly formatted" + RESET);
+            e.printStackTrace();
         }
-        System.out.println(GREEN + "INFO: Starting Services..." + RESET);
-        Thread th = new Thread(new OfflinePlayerChecker(idlePingTimeout, pingCheckInterval));
-        th.start();
-        System.out.println(GREEN + "INFO: Services Started" + RESET);
         System.out.println(GREEN + "INFO: Generating Terrain..."+ RESET);
         this.terrainGenerator = new TerrainGenerator(terrainSize, terrainScale, terrainHeightMult, ironOreFreq, ironOreSize);
         terrainGenerator.generateTerrain(new Vector2f(terrainSeed,terrainSeed));
         System.out.println(GREEN + "INFO: Generated Terrain"+ RESET);
+        System.out.println(GREEN + "INFO: Connecting to AWS bucket" + RESET);
+        awsSync = new AWSSync(awsAccessKey, awsSecretKey, awsRegion);
+        System.out.println(GREEN + "INFO: Connected to AWS bucket" + RESET);
+        System.out.println(GREEN + "INFO: Writing output fIle" + RESET);
+        File file = new File(outputFilePath);
+
+        try (FileWriter fileWriter = new FileWriter(outputFilePath)) {
+            file.createNewFile();
+
+            gson.toJson(terrainGenerator.heightmap, fileWriter);
+            System.out.println(GREEN + "INFO: Wrote output file" + RESET);
+        }catch(IOException e){
+            e.printStackTrace();
+            System.err.println(RED + "ERROR: Could not write output file" + RESET);
+        }
+        System.out.println(GREEN + "INFO: Syncing with AWS bucket" + RESET);
+
+        if (awsSync.sync(outputFilePath, "Heightmap.json", awsBucketName, awsSync.creds, 5)){
+            heightmapURL = awsSync.getUrlOfObject(awsBucketName, "Heightmap.json");
+            System.out.println(GREEN + "INFO: Synced with AWS bucket, heightmap avaliable at" + heightmapURL + RESET);
+        }
+
+        System.out.println(GREEN + "INFO: Starting Services..." + RESET);
+        Thread th = new Thread(new OfflinePlayerChecker(idlePingTimeout, pingCheckInterval));
+        th.start();
+        System.out.println(GREEN + "INFO: Services Started" + RESET);
+
         System.out.println(GREEN + "INFO: Server is up on address" + getAddress()+ RESET);
     }
     private class OfflinePlayerChecker implements Runnable {
@@ -207,11 +272,11 @@ public class GameWebSocketServer extends WebSocketServer {
                     System.out.println(GREEN + "INFO: Checking for offline players..." + RESET);
                     for (int i = 0; i < players.size(); i++){
                         player user = players.get(i);
-                        System.out.printf(GREEN + "    INFO: Checking %s, lastUpdate at %s, current time %s, difference %s\n" + RESET, user.name, (int)user.lastUpdate, System.currentTimeMillis(), System.currentTimeMillis() - (int)user.lastUpdate);
+                        System.out.printf(GREEN + "    INFO: Checking %s, lastUpdate at %s, current time %s, difference %s, should time out: %s\n" + RESET, user.name, user.lastUpdate, System.currentTimeMillis(), System.currentTimeMillis() - user.lastUpdate, user.lastUpdate + idleTimeoutDelay < System.currentTimeMillis());
                         if (user.lastUpdate + idleTimeoutDelay < System.currentTimeMillis()){
                             players.remove(user);
                             user.connection.close(0, "idleTimeOut");
-                            System.out.println(YELLOW + "WARN: Player " + user.name + " timed out" + RESET);
+                            System.out.println(YELLOW + "WARNING: Player " + user.name + " timed out" + RESET);
                         }
                     }
                     Thread.sleep((long)pingCheckInterval); // Check every 5 seconds
@@ -226,7 +291,7 @@ public class GameWebSocketServer extends WebSocketServer {
 class player{
     public String name;
     public Vector3f position;
-    public float lastUpdate;
+    public long lastUpdate;
     public WebSocket connection;
     public clientPlayer ClientPlayer;
     public int id;

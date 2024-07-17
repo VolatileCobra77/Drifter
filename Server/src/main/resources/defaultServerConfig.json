@@ -39,7 +39,7 @@
   "AWS": {
     "comment": "If not using AWS for heightmap shareing, set useAws to false, the server will then share the heightmap over the websocket connection (CAUTION: This requires a high bandwidth as the heightmap is a very large file and can easily be over a gigabyte)",
     "useAws": true,
-    "bucketName": "",
+    "bucketName": "drifterworldsync",
     "secretKey": "",
     "accessKey": "",
     "region": "us-east-2"
