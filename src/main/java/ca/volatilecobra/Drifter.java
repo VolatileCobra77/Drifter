@@ -12,15 +12,19 @@ import com.jme3.bullet.collision.shapes.*;
 import com.jme3.bullet.control.CharacterControl;
 import com.jme3.bullet.control.RigidBodyControl;
 import com.jme3.input.KeyInput;
+import com.jme3.input.MouseInput;
 import com.jme3.input.controls.ActionListener;
 import com.jme3.input.controls.KeyTrigger;
+import com.jme3.input.controls.MouseButtonTrigger;
 import com.jme3.light.DirectionalLight;
 import com.jme3.material.Material;
+import com.jme3.material.RenderState;
 import com.jme3.math.*;
 import com.jme3.network.Network;
 import com.jme3.post.FilterPostProcessor;
 import com.jme3.post.filters.ColorOverlayFilter;
 import com.jme3.renderer.RenderManager;
+import com.jme3.renderer.queue.RenderQueue;
 import com.jme3.scene.*;
 import com.jme3.scene.control.Control;
 import com.jme3.terrain.geomipmap.TerrainQuad;
@@ -34,6 +38,7 @@ import com.jme3.scene.shape.Sphere;
 import com.simsilica.lemur.*;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
+import ca.volatilecobra.WaveFunctions;
 
 import java.io.*;
 import java.lang.reflect.Type;
@@ -43,15 +48,20 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
 public class Drifter extends SimpleApplication implements ActionListener {
 
 
     //initalize private variables
-    private String name;
+    private static String name = null;
+    private Float sineAmmount = 10f;
     private FilterPostProcessor waterPostProcessor;
     private Vector3f lastUpdateLocation;
     private int id;
+    private static String ip = null;
+    private static String port = null;
     private List<player> players = new ArrayList<player>();
     private List<Geometry> playerGeometrys  = new ArrayList<Geometry>();
     private List<player> lastUpdatePlayers = new ArrayList<player>();
@@ -73,11 +83,13 @@ public class Drifter extends SimpleApplication implements ActionListener {
     private boolean statsOverlay = false, fpsOverlay = false;
     private CustomWaterGenerator customWaterGenerator;
     private float movement = 0f;
+    private float waterMovement = 0f;
     private int tick;
     private boolean sphereMass = false;
     private String keyPressed = "";
     private List<Vector3f> GlobalHeightMap;
     public Material waterMaterial;
+    public WaveFunctions waveFunctions = new WaveFunctions();
     //breaks Java for some reason, looking into it -VolatileCobra77
 //    private AudioNode underwater_scary = new AudioNode(assetManager, "Sounds/ambience/underwater_scary.wav", AudioData.DataType.Buffer);
 //    private AudioNode above_water_scary = new AudioNode(assetManager, "Sounds/ambience/Above_water_scary.wav", AudioData.DataType.Buffer);
@@ -88,7 +100,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
 //    private AudioNode whale = new AudioNode(assetManager, "Sounds/creature_sounds/whales/whale.wav", AudioData.DataType.Buffer);
 //    private AudioNode bigCreature = new AudioNode(assetManager, "Sounds/creature_sounds/misc/big_creature_coming_by.wav");
 
-    private boolean connected = false, setUp = false, playing = false, playerHasControl = false, forward = false, backward = false, left = false, right = false, up = false, down = false, underwater = false, lastTickUnderwater = underwater;
+    private boolean rightClickDown = false, leftClicKDown = false, connected = false, setUp = false, playing = false, playerHasControl = false, forward = false, backward = false, left = false, right = false, up = false, down = false, underwater = false, lastTickUnderwater = underwater;
     //initalize final variables
     final private Vector3f walkDir = new Vector3f();
     final private Vector3f camDir = new Vector3f();
@@ -102,8 +114,14 @@ public class Drifter extends SimpleApplication implements ActionListener {
 
     public static void main(String[] args) {
         Drifter app = new Drifter();
-        app.setShowSettings(false); //Settings dialog not supported on mac
+        app.setShowSettings(true); //Settings dialog not supported on mac
         app.start();
+        if ((args[0].equals("--connect") || args[0].equals("--ip"))&&args[2].equals("--port")&&args[4].equals("--name")&&args.length>=6){
+            System.out.printf("CLI arguments provided, using ip %s:%s, with name %s\n", args[1], args[3], args[5]);
+            ip = args[1];
+            port = args[3];
+            name = args[5];
+        }
     }
 
     private void setUpKeys(){
@@ -116,6 +134,10 @@ public class Drifter extends SimpleApplication implements ActionListener {
         inputManager.addMapping("down", new KeyTrigger(KeyInput.KEY_C));
         inputManager.addMapping("down", new KeyTrigger(KeyInput.KEY_LSHIFT));
         inputManager.addMapping("pause", new KeyTrigger(KeyInput.KEY_ESCAPE));
+        inputManager.addMapping("addSines", new KeyTrigger(KeyInput.KEY_NUMPAD1));
+        inputManager.addMapping("subSines", new KeyTrigger(KeyInput.KEY_NUMPAD0));
+        inputManager.addMapping("rightClick", new MouseButtonTrigger(MouseInput.BUTTON_RIGHT));
+        inputManager.addMapping("leftClick", new MouseButtonTrigger(MouseInput.BUTTON_LEFT));
         inputManager.addListener(this, "forward");
         inputManager.addListener(this, "backward");
         inputManager.addListener(this, "left");
@@ -123,17 +145,26 @@ public class Drifter extends SimpleApplication implements ActionListener {
         inputManager.addListener(this, "up");
         inputManager.addListener(this, "down");
         inputManager.addListener(this, "pause");
+        inputManager.addListener(this, "addSines");
+        inputManager.addListener(this, "subSines");
+        inputManager.addListener(this, "rightClick");
+        inputManager.addListener(this, "leftClick");
     }
 
-    public void AddBouyancy(RigidBodyControl Object, Vector3f Amplitude){
+    public void AddBouyancy(RigidBodyControl Object, Vector3f Amplitude, Vector3f Dampner, boolean useExponentialDampning){
 
-        bouyantObjects.add(new bouyantObject(Object, Amplitude));
+        bouyantObjects.add(new bouyantObject(Object, Amplitude, Dampner, useExponentialDampning));
     }
 
     public void CheckBouyancy(){
         for (bouyantObject Object: bouyantObjects){
-            if (Object.CheckFloating()){
-                Object.physicsControl.applyForce(Object.amplitude, new Vector3f(0,0,0));
+            if (Object.CheckFloating(waterMovement, sineAmmount)){
+                if (Object.applyExpDamp){
+                    Object.physicsControl.applyForce(Object.applyExponentialDamping(Object.amplitude, Object.dampner, timer.getTimePerFrame()), new Vector3f(0,0,0));
+                }else{
+                    Object.physicsControl.applyForce(Object.applyLinearDamping(Object.amplitude, Object.dampner), new Vector3f(0,0,0));
+                }
+
             }
         }
     }
@@ -148,9 +179,29 @@ public class Drifter extends SimpleApplication implements ActionListener {
             case "up" -> up = isPressed;
             case "down" -> down = isPressed;
             case "pause" -> pauseGame();
+            case "addSines" -> sineAmmount += 10;
+            case "subSines" -> sineAmmount -= 10;
+            case "rightClick" -> processRightClick(isPressed);
+            case "leftClick" -> processLeftClick(isPressed);
         }
 
     }
+    private void processRightClick(boolean isPressed){
+        rightClickDown = isPressed;
+        if (isPressed){
+
+        }
+
+    }
+
+    private void processLeftClick(boolean isPressed){
+        leftClicKDown = isPressed;
+        if (isPressed){
+
+        }
+    }
+
+
     private void pauseGame(){
         playerHasControl = false;
         mainMenu.removeFromParent();
@@ -171,9 +222,18 @@ public class Drifter extends SimpleApplication implements ActionListener {
         Container errorMenu = new Container();
         connectionDialog = new Container();
         Label errorLabel = new Label("There Was an Error connecting to your session, ensure you have the right IP and port!");
-        TextField ipField = new TextField("Ip");
-        TextField portField = new TextField("Port");
-        TextField nameField = new TextField("name");
+        if (ip == null){
+            ip = "Ip";
+        }
+        if (port == null){
+            port = "Port";
+        }
+        if (name == null){
+            name = "Name";
+        }
+        TextField ipField = new TextField(ip);
+        TextField portField = new TextField(port);
+        TextField nameField = new TextField(name);
         Button connect = new Button("Connect");
         errorMenu.addChild(errorLabel);
 
@@ -474,7 +534,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
         bulletAppState.getPhysicsSpace().add(player);
         terrain.addControl(new RigidBodyControl(0));
         bulletAppState.getPhysicsSpace().add(terrain);
-        setUpWater();
+        //setUpWater();
     }
 
     public boolean initalizeOnline(String ip, String port){
@@ -498,6 +558,11 @@ public class Drifter extends SimpleApplication implements ActionListener {
                 @Override
                 public void onError(Exception ex) {
                     ex.printStackTrace();
+                    playing = false;
+                    playerHasControl = false;
+                    mainMenu.attachChild(new Label("There Was an Error connecting to your session, ensure you have the right IP and port!"));
+                    guiNode.attachChild(mainMenu);
+                    guiNode.attachChild(background);
                 }
             };
             client.connect();
@@ -550,7 +615,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
         rootNode.attachChild(terrain);
         bulletAppState.getPhysicsSpace().add(raftControl);
         bulletAppState.getPhysicsSpace().add(sphereControl);
-        AddBouyancy(sphereControl, new Vector3f(0,20,0));
+        AddBouyancy(sphereControl, new Vector3f(0,20,0), new Vector3f(0, 50f, 0), true);
         bulletAppState.getPhysicsSpace().add(player);
         terrain.addControl(new RigidBodyControl(0));
         bulletAppState.getPhysicsSpace().add(terrain);
@@ -577,13 +642,69 @@ public class Drifter extends SimpleApplication implements ActionListener {
         viewPort.setBackgroundColor(ColorRGBA.White);
     }
 
+    private Geometry createPlane(Vector2f size, float height) {
+        int width = (int) size.x;
+        int depth = (int) size.y;
+
+        Mesh mesh = new Mesh();
+
+        Vector3f[] vertices = new Vector3f[width * depth];
+        int[] indices = new int[(width - 1) * (depth - 1) * 6];
+
+        // Create vertices
+        int i = 0;
+        for (int z = 0; z < depth; z++) {
+            for (int x = 0; x < width; x++) {
+                vertices[i] = new Vector3f(x, height, z);
+                i++;
+            }
+        }
+
+        // Create indices
+        int index = 0;
+        for (int z = 0; z < depth - 1; z++) {
+            for (int x = 0; x < width - 1; x++) {
+                int topLeft = (z * width) + x;
+                int topRight = topLeft + 1;
+                int bottomLeft = ((z + 1) * width) + x;
+                int bottomRight = bottomLeft + 1;
+
+                // First triangle
+                indices[index++] = topLeft;
+                indices[index++] = bottomLeft;
+                indices[index++] = topRight;
+
+                // Second triangle
+                indices[index++] = topRight;
+                indices[index++] = bottomLeft;
+                indices[index++] = bottomRight;
+            }
+        }
+
+        mesh.setBuffer(VertexBuffer.Type.Position, 3, BufferUtils.createFloatBuffer(vertices));
+        mesh.setBuffer(VertexBuffer.Type.Index, 3, BufferUtils.createIntBuffer(indices));
+        mesh.updateBound();
+
+        Geometry geom = new Geometry("DeformedPlane", mesh);
+        return geom;
+    }
+
     public void setUpWater(){
-        Mesh oceanMesh = new Box(1000, 0.002f, 1000);
-        waterGeom = new Geometry("Ocean", oceanMesh);
+
+        waterGeom = createPlane(new Vector2f(1000,1000), 0);
+        waterGeom.setLocalScale(new Vector3f(5,waterGeom.getLocalScale().y,5));
         //waterGeom.rotate(-(float)Math.PI/2f,0,0);
         waterGeom.setLocalTranslation(-500,0,-500);
-        waterMaterial = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
-        waterMaterial.setTexture("ColorMap",  assetManager.loadTexture("Textures/WaterTransparent.png"));
+        waterMaterial = new Material(assetManager, "MatDefs/ShaderTesting.j3md");
+        waterMaterial.getAdditionalRenderState().setBlendMode(RenderState.BlendMode.Alpha);
+        waterGeom.setQueueBucket(RenderQueue.Bucket.Transparent);
+
+        waterMaterial.setFloat("noiseScalar", 500);
+        waterMaterial.setFloat("matTime", 0);
+        waterMaterial.setVector3("lightDirection", new Vector3f(0.0f, -1.0f, 0.0f));
+        waterMaterial.setFloat("sineNum", sineAmmount);
+
+        waterMaterial.setColor("Color", ColorRGBA.Blue);
 //        waterMaterial = new Material(assetManager, "MatDefs/water.j3md");
 //        waterMaterial.setVector3("iResolution", new Vector3f(settings.getWidth(),settings.getHeight(),0));
 //        waterMaterial.setFloat("iTime", 10);
@@ -635,6 +756,9 @@ public class Drifter extends SimpleApplication implements ActionListener {
         if (playing){
 
             movement++;
+            waterMovement += 0.01f;
+            waterMaterial.setFloat("matTime", waterMovement);
+            waterMaterial.setFloat("sineNum", sineAmmount);
             CheckBouyancy();
             for (Geometry geo:playerGeometrys){
                 geo.removeFromParent();
@@ -652,7 +776,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
             lastUpdatePlayerGeometrys = playerGeometrys;
             lastUpdatePlayers = players;
 
-            movement += 0.01f;
+
 //        waterGeom.removeFromParent();
 //
 //        newData = customWaterGenerator.regenerateMap(player.getPhysicsLocation(), new Vector2f(movement,movement));
@@ -675,15 +799,20 @@ public class Drifter extends SimpleApplication implements ActionListener {
                     movement = 0;
                 }
                 inputManager.setCursorVisible(false);
-                if (player.getPhysicsLocation().y <= 0) {
+                if (player.getPhysicsLocation().y <= (waveFunctions.sumOfSines(waterMovement, player.getPhysicsLocation().x, sineAmmount) + waveFunctions.sumOfSines(waterMovement, player.getPhysicsLocation().z, sineAmmount)) * 0.3f) {
                     underwater = true;
 
                 } else {
                     underwater = false;
 
                 }
-                if (lastTickUnderwater != underwater) {
+                if (lastTickUnderwater != underwater && up) {
                     player.jump();
+                }else if (lastTickUnderwater != underwater){
+                    float oldJumpSpeed = player.getJumpSpeed();
+                    player.setJumpSpeed(10);
+                    player.jump();
+                    player.setJumpSpeed(oldJumpSpeed);
                 }
                 processPlayerInput();
             } else {
@@ -749,16 +878,29 @@ public class Drifter extends SimpleApplication implements ActionListener {
 class bouyantObject{
     public RigidBodyControl physicsControl;
     public Vector3f amplitude;
+    public Vector3f dampner;
+    public boolean applyExpDamp;
     public boolean shouldFloat;
 
-    public bouyantObject(RigidBodyControl physicsControl, Vector3f amplitude){
+    public bouyantObject(RigidBodyControl physicsControl, Vector3f amplitude, Vector3f dampner, boolean useExponentialDampning){
         this.physicsControl = physicsControl;
         this.amplitude = amplitude;
+        this.dampner = dampner;
+        this.applyExpDamp = useExponentialDampning;
+    }
+    public Vector3f applyLinearDamping(Vector3f amplitude, Vector3f dampingFactor) {
+        return amplitude.mult(dampingFactor.negate());
     }
 
-    public boolean CheckFloating(){
+    public Vector3f applyExponentialDamping(Vector3f amplitude, Vector3f dampingFactor, float deltaTime) {
+        return amplitude.mult(new Vector3f((float)Math.exp(dampingFactor.x * deltaTime), (float)Math.exp(dampingFactor.y * deltaTime), (float)Math.exp(dampingFactor.z * deltaTime)));
+    }
 
-        shouldFloat = physicsControl.getPhysicsLocation().y <= 0;
+
+    public boolean CheckFloating(float time, float numOfSines){
+
+        WaveFunctions waveFunctions = new WaveFunctions();
+        shouldFloat = physicsControl.getPhysicsLocation().y <= (waveFunctions.sumOfSines(time, physicsControl.getPhysicsLocation().x, numOfSines) + waveFunctions.sumOfSines(time, physicsControl.getPhysicsLocation().z, numOfSines)) * 0.3f;
         return shouldFloat;
 
     }

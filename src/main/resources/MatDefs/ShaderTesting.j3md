@@ -1,0 +1,22 @@
+MaterialDef Simple {
+    MaterialParameters {
+        Texture2D waterTexture
+        Vector3 lightDirection
+        Float noiseScalar
+        Float noiseOffset
+        Float matTime;
+        Float sineNum
+        Vector2 offset;
+        Color Color (Color);
+    }
+    Technique {
+        VertexShader GLSL130:   Shaders/shaderTest.vert
+        FragmentShader GLSL130: Shaders/shaderTest.frag
+        WorldParameters {
+            matTime
+            WorldViewProjectionMatrix
+            WorldMatrix
+        }
+
+    }
+}
