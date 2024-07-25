@@ -1,6 +1,6 @@
 package ca.volatilecobra.terrain.chunk;
 
-import ca.volatilecobra.Drifter;
+import ca.volatilecobra.Drifter.Drifter;
 import ca.volatilecobra.terrain.config.StoragePaths;
 import ca.volatilecobra.terrain.iso.MeshGenerator;
 import ca.volatilecobra.terrain.iso.mc.MarchingCubesMeshGenerator2;
@@ -8,18 +8,14 @@ import ca.volatilecobra.terrain.iso.volume.ArrayDensityVolume;
 import ca.volatilecobra.terrain.material.WorldMaterial;
 import ca.volatilecobra.terrain.util.GeometryUtils;
 import ca.volatilecobra.terrain.world.World;
-import com.jme3.math.Vector2f;
 import com.jme3.math.Vector3f;
 import com.jme3.scene.Geometry;
 import com.jme3.scene.Mesh;
 import com.jme3.scene.Node;
-import com.jme3.scene.VertexBuffer;
-import com.jme3.util.BufferUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
-import java.nio.FloatBuffer;
 import java.nio.file.Paths;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicBoolean;

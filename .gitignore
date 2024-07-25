@@ -5,7 +5,14 @@
 /*.dll
 /*.dylib
 /*.so
-/Server/src/main/resources/personalConfig_DO_NOT_COMMIT.json
+/*.exe
+/src/main/resources/Config/Server/personalConfig_DO_NOT_COMMIT.json
+/data/saves/
+/Installer/*
+!/Installer/*.py
+!/Installer/Scripts/
+!/Installer/.pyenv
+/Server/build/
 #Although most of the .idea directory should not be committed there is a legitimate purpose for committing run configurations
 /.idea/
 !/.idea/runConfigurations/
