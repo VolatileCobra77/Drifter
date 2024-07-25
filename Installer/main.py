@@ -272,7 +272,7 @@ def checkForUpdates(versionLabel):
         currentVersionNum += int(versionNum)
 
     if latestVersionNum > currentVersionNum:
-        if messagebox.askyesno("Update Avalible", "There is an update avalible, download and install it?"):
+        if messagebox.askyesno(f"Update To Version {latestVersion} Avalible", f"There is an update avalible! \n Version {latestVersion} is avalible. {currentVersion} is installed \n Download and install it?"):
             downloadVersion(operatingSystem, installDirectory)
             
             return

@@ -12,7 +12,7 @@ description = 'Drifter is a WIP MMO where you are stranded on a peice of driftwo
 shadowJar {
     archiveBaseName.set('Drifter')
     archiveClassifier.set('Beta')
-    archiveVersion.set('0.2.3')
+    archiveVersion.set('0.3.0')
 }
 
 java {
@@ -32,6 +32,7 @@ repositories {
     maven { url "https://jitpack.io" }
     mavenCentral()
     mavenLocal()
+    jcenter()
 }
 
 application {
@@ -61,8 +62,13 @@ dependencies {
 
     implementation 'com.simsilica:lemur:1.16.0'
     implementation 'com.simsilica:lemur-proto:1.13.0'
-    implementation 'org.apache.logging.log4j:log4j-core:2.23.1'
-    implementation 'org.apache.logging.log4j:log4j-api:2.23.1'
+    implementation "com.simsilica:lemur-props:1.0.1"
+    implementation 'org.apache.logging.log4j:log4j-core:2.14.1'
+    implementation 'org.apache.logging.log4j:log4j-api:2.14.1'
+
+    implementation "com.google.guava:guava:21.0",
+            'org.codehaus.groovy:groovy-all:2.4.7'
+
 
     implementation 'org.joml:joml:1.10.4'
 }
@@ -105,6 +111,11 @@ task buildWindowsDistribution(dependsOn: [distZip, downloadAndUnzipWindowsJre], 
     includeEmptyDirs false
     exclude 'bin/**' //we are adding our own run scripts, exclude the ones coming from distZip
 }
+
+task compileAndZipWinodws(dependsOn:shadowJar){
+
+}
+
 
 task zipWindowsDistribution( dependsOn:buildWindowsDistribution, type: Zip) {
     group 'distribution'
@@ -156,6 +167,8 @@ task zipLinuxDistribution( dependsOn:buildLinuxDistribution, type: Zip) {
         exclude('**/java')
     }
 }
+
+
 
 
 task downloadMacJre(type: Download) {

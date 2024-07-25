@@ -1,21 +1,33 @@
 package ca.volatilecobra;
 
+import ca.volatilecobra.terrain.chunk.Chunk;
+import ca.volatilecobra.terrain.config.StoragePaths;
+import ca.volatilecobra.terrain.core.ApplicationContext;
+import ca.volatilecobra.terrain.gui.TerrainEditorGui;
+import ca.volatilecobra.terrain.input.movement.SimpleCameraMovement;
+import ca.volatilecobra.terrain.interaction.SimpleInteractionState;
+import ca.volatilecobra.terrain.world.AnimaliaWorld;
+import ca.volatilecobra.terrain.world.World;
+import ca.volatilecobra.terrain.world.WorldType;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
 import com.jme3.app.SimpleApplication;
+import com.jme3.app.StatsAppState;
 import com.jme3.asset.AssetManager;
 import com.jme3.bullet.BulletAppState;
 import com.jme3.bullet.collision.shapes.*;
 import com.jme3.bullet.control.CharacterControl;
 import com.jme3.bullet.control.RigidBodyControl;
+import com.jme3.bullet.util.CollisionShapeFactory;
 import com.jme3.input.KeyInput;
 import com.jme3.input.MouseInput;
 import com.jme3.input.controls.ActionListener;
 import com.jme3.input.controls.KeyTrigger;
 import com.jme3.input.controls.MouseButtonTrigger;
+import com.jme3.light.AmbientLight;
 import com.jme3.light.DirectionalLight;
 import com.jme3.material.Material;
 import com.jme3.material.RenderState;
@@ -27,6 +39,7 @@ import com.jme3.renderer.RenderManager;
 import com.jme3.renderer.queue.RenderQueue;
 import com.jme3.scene.*;
 import com.jme3.scene.control.Control;
+import com.jme3.system.AppSettings;
 import com.jme3.terrain.geomipmap.TerrainQuad;
 import com.jme3.terrain.heightmap.HeightMap;
 import com.jme3.texture.Texture;
@@ -55,6 +68,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
 
 
     //initalize private variables
+    private Node terrain;
     private static String name = null;
     private Float sineAmmount = 10f;
     private FilterPostProcessor waterPostProcessor;
@@ -90,6 +104,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
     private List<Vector3f> GlobalHeightMap;
     public Material waterMaterial;
     public WaveFunctions waveFunctions = new WaveFunctions();
+    private int ChunkDistSquared = 23 * 23;
     //breaks Java for some reason, looking into it -VolatileCobra77
 //    private AudioNode underwater_scary = new AudioNode(assetManager, "Sounds/ambience/underwater_scary.wav", AudioData.DataType.Buffer);
 //    private AudioNode above_water_scary = new AudioNode(assetManager, "Sounds/ambience/Above_water_scary.wav", AudioData.DataType.Buffer);
@@ -111,9 +126,16 @@ public class Drifter extends SimpleApplication implements ActionListener {
     public Spatial sphere;
     public CharacterControl player;
     public RigidBodyControl sphereControl;
+    public static boolean SAVE_CHUNKS = false;
+
 
     public static void main(String[] args) {
         Drifter app = new Drifter();
+        AppSettings appSettings = new AppSettings(true);
+        appSettings.setRenderer(AppSettings.LWJGL_OPENGL33);
+        appSettings.setTitle("Drifter, build 0.3.0");
+        appSettings.setResizable(true);
+        app.setSettings(appSettings);
         app.setShowSettings(true); //Settings dialog not supported on mac
         app.start();
         if ((args[0].equals("--connect") || args[0].equals("--ip"))&&args[2].equals("--port")&&args[4].equals("--name")&&args.length>=6){
@@ -123,6 +145,13 @@ public class Drifter extends SimpleApplication implements ActionListener {
             name = args[5];
         }
     }
+
+    private Drifter(){
+        super(new StatsAppState());
+
+        StoragePaths.create();
+    }
+
 
     private void setUpKeys(){
         inputManager.deleteMapping(SimpleApplication.INPUT_MAPPING_EXIT);
@@ -573,15 +602,76 @@ public class Drifter extends SimpleApplication implements ActionListener {
         }
 
     }
+    public boolean needsUpdate(Geometry chunk, float dist){
+        Vector3f chunkPos = chunk.getWorldTranslation();
+        Vector3f playerPos = player.getPhysicsLocation();
+
+        boolean shouldCalculate = chunkPos.distanceSquared(playerPos) <= dist;
+
+        if(shouldCalculate){
+            System.out.println("Calculating Chunk "+ chunkPos.toString());
+        }
+        return shouldCalculate;
+    }
+    public boolean needsUpdateNode(Node chunk, float dist){
+        Vector3f chunkPos = chunk.getLocalTranslation();
+        Vector3f playerPos = player.getPhysicsLocation();
+        Vector3f chunkXZ = new Vector3f(chunkPos.x, 0, chunkPos.z);
+        Vector3f playerXZ = new Vector3f(playerPos.x, 0, playerPos.z);
+
+
+        return chunkXZ.distanceSquared(playerXZ) <= dist;
+    }
+
+
+    public void updateCollision(Vector3f playerPos) {
+        for (Spatial chunk : terrain.getChildren()) {
+            if (chunk instanceof Node) {
+                if (needsUpdateNode((Node) chunk, ChunkDistSquared)) {
+                    for (Spatial chunkPart : ((Node) chunk).getChildren()) {
+                        if (chunkPart instanceof Geometry geom) {
+                            if (needsUpdate(geom, 20*20)){
+                                CollisionShape collider = CollisionShapeFactory.createMeshShape(geom);
+
+                                // Check for existing control and update it
+                                RigidBodyControl oldControl = geom.getControl(RigidBodyControl.class);
+                                if (oldControl != null) {
+                                    return;
+                                }
+
+                                // Create and add the new RigidBodyControl
+                                RigidBodyControl newControl = new RigidBodyControl(collider, 0f);
+                                chunk.addControl(newControl);
+                                bulletAppState.getPhysicsSpace().add(newControl);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     public void initalizeOffline(){
 
         setUpSkybox();
 
+        ApplicationContext appContext = new ApplicationContext(this);
 
-        TerrainGenerator terrainGenerator = new TerrainGenerator(assetManager, cam);
-        TerrainQuad terrain = terrainGenerator.getTerrain();
-        terrain.scale(352, 25, 352);
-        terrain.setLocalTranslation(0,0,0);
+        //TerrainGenerator terrainGenerator = new TerrainGenerator(assetManager, cam);
+        World world =  new AnimaliaWorld(appContext, WorldType.EARTH, 1234, "My World 2");
+        terrain = world.getWorldNode();
+
+        terrain.setLocalTranslation(0,-20,0);
+        AmbientLight ambient = new AmbientLight();
+        ambient.setColor(ColorRGBA.White.mult(0.5f));
+        rootNode.addLight(ambient);
+
+
+
+        SimpleCameraMovement cameraMovement = new SimpleCameraMovement(appContext, world);
+        stateManager.attach(cameraMovement);
+
+
 
         stateManager.attach(bulletAppState);
         CapsuleCollisionShape playerControl = new CapsuleCollisionShape(1,2);
@@ -609,6 +699,8 @@ public class Drifter extends SimpleApplication implements ActionListener {
         raft.setMaterial(brown);
 
 
+
+
         rootNode.attachChild(sphere);
         rootNode.attachChild(raft);
         terrain.setLocalTranslation(new Vector3f(0,-50,0));
@@ -617,9 +709,8 @@ public class Drifter extends SimpleApplication implements ActionListener {
         bulletAppState.getPhysicsSpace().add(sphereControl);
         AddBouyancy(sphereControl, new Vector3f(0,20,0), new Vector3f(0, 50f, 0), true);
         bulletAppState.getPhysicsSpace().add(player);
-        terrain.addControl(new RigidBodyControl(0));
-        bulletAppState.getPhysicsSpace().add(terrain);
         setUpWater();
+        updateCollision(player.getPhysicsLocation());
     }
 
     private void setUpSkybox() {
@@ -793,6 +884,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
             setDisplayFps(fpsOverlay);
             setDisplayStatView(statsOverlay);
             if (playerHasControl) {
+                updateCollision(player.getPhysicsLocation());
                 if (movement >=30 && connected){
                     syncWithServer();
 
