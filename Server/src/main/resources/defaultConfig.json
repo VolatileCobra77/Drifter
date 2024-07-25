@@ -1,0 +1,80 @@
+{
+  "TerrainGenerator": {
+    "comment": "This is the settings for the Legacy terrainGenerator to generate terrain",
+    "useLegacy": true,
+    "ores": {
+      "iron": {
+        "frequencyMult": 1,
+        "sizeMult": 1
+      }
+    },
+    "terrain": {
+      "seed": 1234,
+      "size": {
+        "x": 512,
+        "y": 512
+      },
+      "heightMult": 2,
+      "scale": 0.25
+    },
+    "outFile": "worldFile.json"
+  },
+  "NewTerrainGen": {
+    "comment": "New terrain generation thanks to jeyfella, link in README.",
+    "seed": 1234,
+    "SaveFile": {
+      "SaveWorld": true,
+      "SaveFileName": "My Save",
+      "comment": "See StoragePaths to tweak where the save Files are located"
+    },
+    "AntiStrophicFiltering": {
+      "level": 10
+    },
+    "StoragePaths": {
+      "SaveFilePath": "data/saves/",
+      "SettingsPath": "data/settings/",
+      "ModelsPath": "data/models",
+      "TexturesPath": "data/textures"
+    },
+    "Video": {
+      "MaxRenderDistance": 12
+    },
+    "oresComment": "All Paths are relative to the ones defined above, for example, a model path of 'ironOre.fbx' would become 'data/models/ironOre.fbx' (if using default configs",
+    "Ores": [
+      {
+        "Name":"Iron",
+        "Rarity": 1,
+        "MaxVeinSize": 12,
+        "MinVeinSize": 1,
+        "model": "ironOre.fbx",
+        "texture": "ironOre.png"
+      }
+      ]
+  },
+  "Server": {
+    "comment": "This is the settings for the server, including max Players, IP, port, whitelist, blacklist",
+    "address": {
+      "ip": "localhost",
+      "port": 8080
+    },
+    "maxPlayers": 10,
+    "whitelist": {
+      "enabled": false,
+      "whitelistedUsers": []
+    },
+    "blacklist": {
+      "enabled": true,
+      "blacklistedUsers": []
+    },
+    "idlePingTimeout": 30000,
+    "pingCheckInterval": 5000
+  },
+  "AWS": {
+    "comment": "If not using AWS for heightmap shareing, set useAws to false, the server will then share the heightmap over the websocket connection (CAUTION: This requires a high bandwidth as the heightmap is a very large file and can easily be over a gigabyte)",
+    "useAws": true,
+    "bucketName": "",
+    "secretKey": "",
+    "accessKey": "",
+    "region": "us-east-2"
+  }
+}

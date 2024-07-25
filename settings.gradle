@@ -1,4 +1,5 @@
 rootProject.name = 'Drifter'
 include 'Server'
 include 'Server'
+include 'Common'
 

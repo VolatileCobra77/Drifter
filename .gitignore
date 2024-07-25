@@ -13,4 +13,6 @@
 /.idea/
 !/.idea/runConfigurations/
 
+/Backups/
+
 local.properties

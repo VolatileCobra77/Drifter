@@ -1,6 +1,6 @@
 package ca.volatilecobra.terrain.chunk;
 
-import ca.volatilecobra.Drifter;
+import ca.volatilecobra.GameWebSocketServer;
 import ca.volatilecobra.terrain.config.StoragePaths;
 import ca.volatilecobra.terrain.iso.MeshGenerator;
 import ca.volatilecobra.terrain.iso.mc.MarchingCubesMeshGenerator2;
@@ -101,7 +101,7 @@ public class WorldChunk implements Chunk, Callable<Chunk> {
 
         long timeStart = System.currentTimeMillis();
 
-        if (file.exists() && Drifter.SAVE_CHUNKS) {
+        if (file.exists() && GameWebSocketServer.SAVE_CHUNKS) {
             try (FileInputStream fin = new FileInputStream(file); ObjectInputStream ois = new ObjectInputStream(fin)) {
                 this.densityVolume = new ArrayDensityVolume((float[]) ois.readObject(), chunkDensityVolumeSize);
             }
@@ -257,7 +257,7 @@ public class WorldChunk implements Chunk, Callable<Chunk> {
     @Override
     public void save() {
 
-        if (!Drifter.SAVE_CHUNKS) {
+        if (!GameWebSocketServer.SAVE_CHUNKS) {
             return;
         }
 

@@ -37,7 +37,8 @@ repositories {
 
 application {
     if (System.getProperty("os.name").toLowerCase().contains("mac")) {
-        applicationDefaultJvmArgs = ['-XstartOnFirstThread'] // this is when using a Mac as a development machine which requires the AppKit main UI thread to be used for GUI applications
+        applicationDefaultJvmArgs = ['-XstartOnFirstThread', '--add-opens java.base/java.io=ALL-UNNAMED'] // this is when using a Mac as a development machine which requires the AppKit main UI thread to be used for GUI applications
+    }else{
     }
 }
 
@@ -59,6 +60,8 @@ dependencies {
     implementation 'org.jmonkeyengine:jme3-networking:' + jmonkeyengineVersion
     implementation 'org.jmonkeyengine:jme3-jbullet:' + jmonkeyengineVersion
     runtimeOnly 'org.jmonkeyengine:jme3-lwjgl3:' + jmonkeyengineVersion
+
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.13.4'
 
     implementation 'com.simsilica:lemur:1.16.0'
     implementation 'com.simsilica:lemur-proto:1.13.0'
