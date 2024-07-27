@@ -6,11 +6,7 @@ import ca.volatilecobra.terrain.input.movement.SimpleCameraMovement;
 import ca.volatilecobra.terrain.world.AnimaliaWorld;
 import ca.volatilecobra.terrain.world.World;
 import ca.volatilecobra.terrain.world.WorldType;
-import com.google.gson.Gson;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
-import com.google.gson.reflect.TypeToken;
+import com.google.gson.*;
 import com.jme3.app.SimpleApplication;
 import com.jme3.app.StatsAppState;
 import com.jme3.bullet.BulletAppState;
@@ -34,7 +30,6 @@ import com.jme3.renderer.RenderManager;
 import com.jme3.renderer.queue.RenderQueue;
 import com.jme3.scene.*;
 import com.jme3.system.AppSettings;
-import com.jme3.terrain.geomipmap.TerrainQuad;
 import com.jme3.texture.Texture;
 import com.jme3.ui.Picture;
 import com.jme3.util.BufferUtils;
@@ -45,11 +40,7 @@ import com.simsilica.lemur.*;
 import org.java_websocket.client.WebSocketClient;
 import org.java_websocket.handshake.ServerHandshake;
 
-import java.io.*;
-import java.lang.reflect.Type;
 import java.net.*;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -65,11 +56,11 @@ public class Drifter extends SimpleApplication implements ActionListener {
     private int id;
     private static String ip = null;
     private static String port = null;
-    private List<player> players = new ArrayList<player>();
+    private List<ClientPlayer> ClientPlayers = new ArrayList<ClientPlayer>();
     private List<Geometry> playerGeometrys  = new ArrayList<Geometry>();
-    private List<player> lastUpdatePlayers = new ArrayList<player>();
+    private List<ClientPlayer> lastUpdateClientPlayers = new ArrayList<ClientPlayer>();
     private List<Geometry> lastUpdatePlayerGeometrys = new ArrayList<Geometry>();
-    private Gson gson = new Gson();
+    private Gson gson = new GsonBuilder().registerTypeAdapter(Class.class, new ClassTypeAdapter()).create();;
     private WebSocketClient client;
     private BulletAppState bulletAppState;
     private float[] newData;
@@ -414,108 +405,26 @@ public class Drifter extends SimpleApplication implements ActionListener {
         return mesh;
     }
     public void processServerMessage(String message){
-        JsonObject messageJson = JsonParser.parseString(message).getAsJsonObject();
-        //System.out.println("Received message: " + message);
-        // Process messages from the server
-        if (message.startsWith("{connection:")){
-            client.send("{terrainRequest:true}");
-
+        MessageWrapper messageWrapper = gson.fromJson(message, MessageWrapper.class);
+        Class<?> type = messageWrapper.getType();
+        Object contents = gson.fromJson(gson.toJson(messageWrapper.getContents()), type);
+        if (contents instanceof Id){
+            this.id = ((Id) contents).id;
         }
-        long totalBytes = 0;
-        if (message.startsWith("{heightmapURL:")){
-            System.out.println("Reading from URL: ");
-            String heightmapURL = messageJson.get("heightmapURL").getAsString();
-            System.out.print(heightmapURL +"\n");
-            HttpURLConnection connection = null;
-            int fileSize = 0;
-            try {
-                // Open connection to the URL
-                URL url = new URL(heightmapURL);
-                connection = (HttpURLConnection) url.openConnection();
-                connection.setRequestMethod("GET");
-                connection.connect();
-
-                // Get the size of the file
-                fileSize = connection.getContentLength();
-                if (fileSize <= 0) {
-                    throw new IOException("Failed to get file size");
-                }
-            } catch (MalformedURLException e){
-                e.printStackTrace();
-            }catch (IOException e){
-                e.printStackTrace();
-            }
-            try (BufferedInputStream in = new BufferedInputStream(new URL(heightmapURL).openStream())) {
-                if(!Files.exists(Paths.get("Heightmap.json"))){
-                    FileOutputStream fileOut = new FileOutputStream("Heightmap.json");
-                    byte dataBuffer[] = new byte[1024];
-                    int bytesRead = 0;
-
-                    while ((bytesRead = in.read(dataBuffer, 0, 1024)) != -1) {
-                        fileOut.write(dataBuffer, 0, bytesRead);
-                        totalBytes += bytesRead;
-                        System.out.println("Downloaded " + totalBytes + " bytes of " + fileSize + ", " + (int) (((double) totalBytes / fileSize) * 100) + "% done");
-                    }
-                }else{
-                    System.out.println("Heightmap file already exists, using that. If you are unsure, go to the game directory and delete \"heightmap.json\"");
-                }
-
-                Type listType = new TypeToken<List<Vector3f>>() {}.getType();
-                GlobalHeightMap = gson.fromJson(new FileReader("Heightmap.json"), listType);
-
-            } catch (IOException e){
-                System.err.println("ERROR: An error occured while reading heightmap");
-                e.printStackTrace();
-                client.close();
-                guiNode.attachChild(background);
-                guiNode.attachChild(mainMenu);
-            }
-            client.send(String.format("{player:%s, position: %s, inventory: %s}",name, gson.toJson(new Vector3f(0,0,0)), gson.toJson(new ArrayList<List<Integer>>())));
-            connected = true;
-        } else if (message.startsWith("{heightMap:")) {
-            String jsonHeightMap = message.substring("{heightMap:".length(), message.length() - 1);
-            Type listType = new TypeToken<List<Vector3f>>() {}.getType();
-            List<Vector3f> heightMap = gson.fromJson(jsonHeightMap, listType);
-            // Handle the received height map
-            System.out.println("Received height map:");
-
-            GlobalHeightMap = heightMap;
-            connected = true;
-        } else if (message.startsWith("{mcURL:")){
-
+        if (contents instanceof playersList){
+            this.ClientPlayers = ((playersList) contents).ClientPlayers;
         }
-        if (message.startsWith("{players:")){
-            JsonArray playersJson = messageJson.get("players").getAsJsonArray();
-            Type listType = new TypeToken<List<player>>() {}.getType();
-            List<player> tempPlayers = gson.fromJson(playersJson, listType);
-            for (player usr : tempPlayers) {
-                if (usr.id == id){
-                    tempPlayers.remove(usr);
-                }
+        if (contents instanceof SuccessMessage){
+            if (((SuccessMessage) contents).success){
+                connected = true;
             }
-            players = tempPlayers;
-
-            ((List<player>) gson.fromJson(playersJson, listType)).forEach(user -> System.out.printf("Player %s at position %s\n", user.name, user.position));
-        }
-        if (message.startsWith("{id:")){
-            id = messageJson.get("id").getAsInt();
-            System.out.println("Received id: " + id);
         }
     }
 
-    public void setUpOnlineStuff(List<Spatial> objects, List<Spatial> ores, List<Vector3f> heightmap, List<PhysicsObject> PhysicsObjects){
+    public void setUpOnlineStuff(){
 
         setUpSkybox();
-        TerrainGenerator terrainGenerator = null;
-        try {
-             terrainGenerator = new TerrainGenerator(heightmap, assetManager, cam);
-        } catch (Error e) {
-            client.close();
-            e.printStackTrace();
-            System.exit(1);
-        }
-        TerrainQuad terrain = terrainGenerator.getTerrain();
-        terrain.scale(352, 25, 352);
+
 
         stateManager.attach(bulletAppState);
         CapsuleCollisionShape playerControl = new CapsuleCollisionShape(1,2);
@@ -537,25 +446,26 @@ public class Drifter extends SimpleApplication implements ActionListener {
         //sphereControl.setPhysicsLocation(raftControl.getPhysicsLocation().add(new Vector3f(0f,10f,0f)));
         raft.setMaterial(brown);
 
-        for (PhysicsObject object:PhysicsObjects){
-            Material objMat = new Material(assetManager,"Common/MatDefs/Misc/Unshaded.j3md");
-            objMat.setTexture("ColorMap", assetManager.loadTexture("Textures/download.jpg"));
-            object.setUp(objMat);
-            rootNode.attachChild(object.spatial);
-        }
-
 
         //rootNode.attachChild(sphere);
         rootNode.attachChild(raft);
+        terrain = new Node();
+        terrain.attachChild(new Geometry("terrain", new Box(1,1,1)));
         terrain.setLocalTranslation(new Vector3f(0,-50,0));
         rootNode.attachChild(terrain);
         bulletAppState.getPhysicsSpace().add(raftControl);
         //bulletAppState.getPhysicsSpace().add(sphereControl);
         //AddBouyancy(sphereControl, new Vector3f(0,20,0));
+        ApplicationContext appContext = new ApplicationContext(this);
+
+
+        World world =  new AnimaliaWorld(appContext, WorldType.EARTH, 1234, "My World 2", client);
+        terrain = world.getWorldNode();
+        SimpleCameraMovement cameraMovement = new SimpleCameraMovement(appContext, world);
+        stateManager.attach(cameraMovement);
         bulletAppState.getPhysicsSpace().add(player);
-        terrain.addControl(new RigidBodyControl(0));
         bulletAppState.getPhysicsSpace().add(terrain);
-        //setUpWater();
+        setUpWater();
     }
 
     public boolean initalizeOnline(String ip, String port){
@@ -577,8 +487,14 @@ public class Drifter extends SimpleApplication implements ActionListener {
                     playing = false;
                     playerHasControl = false;
                     Label text = new Label("You were disconnected!");
-                    text.setLocalTranslation(0,0,0);
+                    text.setLocalTranslation(0,10,0);
                     text.setColor(ColorRGBA.White);
+                    if (reason.equals("kicked")) {
+                        Label kickedText = new Label("You kicked!");
+                        kickedText.setLocalTranslation(0,0,0);
+                        kickedText.setColor(ColorRGBA.White);
+                        mainMenu.addChild(kickedText);
+                    }
                     mainMenu.attachChild(text);
                     guiNode.attachChild(mainMenu);
                     guiNode.attachChild(background);
@@ -821,8 +737,8 @@ public class Drifter extends SimpleApplication implements ActionListener {
     }
 
     private void syncWithServer(){
-        client.send(String.format("{player:%s, position:%s, inventory:%s, id:%s}", name ,gson.toJson(player.getPhysicsLocation()), gson.toJson(new ArrayList<List<Integer>>()), id));
-        client.send("getPlayers");
+        client.send(gson.toJson(new MessageWrapper(ClientPlayer.class, new ClientPlayer(name, player.getPhysicsLocation(), id))));
+        client.send(gson.toJson(new MessageWrapper(miscReq.class, new miscReq("players"))));
     }
 
 
@@ -831,7 +747,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
         if (connected && !setUp){
             setUp = true;
             try {
-                setUpOnlineStuff(new ArrayList<>(), new ArrayList<>(), GlobalHeightMap, new ArrayList<>());
+                setUpOnlineStuff();
             } catch (Exception e) {
                 e.printStackTrace();
                 playing = false;
@@ -855,7 +771,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
             for (Geometry geo:playerGeometrys){
                 geo.removeFromParent();
             }
-            for (player user :players){
+            for (ClientPlayer user : ClientPlayers){
                 Geometry playerGeo = new Geometry(user.name, new Sphere(30,30,1));
                 Material playerMat = new Material(assetManager, "Common/MatDefs/Misc/Unshaded.j3md");
                 playerMat.setColor("Color", ColorRGBA.Blue);
@@ -866,7 +782,7 @@ public class Drifter extends SimpleApplication implements ActionListener {
                 playerGeometrys.add(playerGeo);
             }
             lastUpdatePlayerGeometrys = playerGeometrys;
-            lastUpdatePlayers = players;
+            lastUpdateClientPlayers = ClientPlayers;
 
 
 //        waterGeom.removeFromParent();
@@ -998,11 +914,11 @@ class bouyantObject{
 
     }
 }
-class player{
+class ClientPlayer {
     public String name;
     public Vector3f position;
     public int id;
-    public player(String name, Vector3f position, int id){
+    public ClientPlayer(String name, Vector3f position, int id){
         this.name = name;
         this.position = position;
         this.id = id;

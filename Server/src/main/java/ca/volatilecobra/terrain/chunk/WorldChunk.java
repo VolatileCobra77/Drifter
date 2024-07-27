@@ -1,6 +1,6 @@
 package ca.volatilecobra.terrain.chunk;
 
-import ca.volatilecobra.GameWebSocketServer;
+import ca.volatilecobra.GameServer;
 import ca.volatilecobra.terrain.config.StoragePaths;
 import ca.volatilecobra.terrain.iso.MeshGenerator;
 import ca.volatilecobra.terrain.iso.mc.MarchingCubesMeshGenerator2;
@@ -101,7 +101,7 @@ public class WorldChunk implements Chunk, Callable<Chunk> {
 
         long timeStart = System.currentTimeMillis();
 
-        if (file.exists() && GameWebSocketServer.SAVE_CHUNKS) {
+        if (file.exists() && GameServer.SAVE_CHUNKS) {
             try (FileInputStream fin = new FileInputStream(file); ObjectInputStream ois = new ObjectInputStream(fin)) {
                 this.densityVolume = new ArrayDensityVolume((float[]) ois.readObject(), chunkDensityVolumeSize);
             }
@@ -257,17 +257,25 @@ public class WorldChunk implements Chunk, Callable<Chunk> {
     @Override
     public void save() {
 
-        if (!GameWebSocketServer.SAVE_CHUNKS) {
+        if (!GameServer.SAVE_CHUNKS) {
             return;
         }
 
         long timeStart = System.currentTimeMillis();
 
-        try (FileOutputStream fout = new FileOutputStream(file); ObjectOutputStream oos = new ObjectOutputStream(fout)) {
-            oos.writeObject(this.densityVolume.getDenistyArray());
-        }
-        catch (IOException ex) {
-            log.error("Error saving chunk", ex);
+        while (true){
+            try (FileOutputStream fout = new FileOutputStream(file); ObjectOutputStream oos = new ObjectOutputStream(fout)) {
+                oos.writeObject(this.densityVolume.getDenistyArray());
+                break;
+            } catch (IOException ex) {
+                log.error("Error saving chunk, creating file");
+                try{
+                    file.createNewFile();
+                }catch(IOException ex1){
+                    log.error("Error creating file, aborting", ex1);
+                    System.exit(-1);
+                }
+            }
         }
 
         long timeEnd = System.currentTimeMillis();

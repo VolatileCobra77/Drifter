@@ -10,6 +10,7 @@ import ca.volatilecobra.terrain.pager.ChunkPager;
 import com.jme3.math.Vector3f;
 import com.jme3.renderer.queue.RenderQueue;
 import com.jme3.scene.Node;
+import org.java_websocket.client.WebSocketClient;
 
 import java.io.File;
 import java.nio.file.Paths;
@@ -30,7 +31,7 @@ public class AnimaliaWorld implements World {
 
     private final BiomeGenerator biomeGenerator;
 
-    public AnimaliaWorld(ApplicationContext appContext, WorldType worldType, long seed, String name) {
+    public AnimaliaWorld(ApplicationContext appContext, WorldType worldType, long seed, String name){
 
         this.appContext = appContext;
         this.worldType = worldType;
@@ -53,8 +54,33 @@ public class AnimaliaWorld implements World {
             worldPath.mkdirs();
         }
 
+    }
+    public AnimaliaWorld(ApplicationContext appContext, WorldType worldType, long seed, String name, WebSocketClient client) {
+
+        this.appContext = appContext;
+        this.worldType = worldType;
+        this.seed = seed;
+        this.name = name;
+
+        this.worldNode = new Node(String.format("Node - %s", this.toString()));
+        this.worldNode.setShadowMode(RenderQueue.ShadowMode.CastAndReceive);
+
+        this.chunkLoader = new ChunkLoader(this);
+        this.chunkPager = new ChunkPager(this);
+
+        this.biomeGenerator = new BiomeGenerator(seed);
+
+        this.chunkPager.setWorldLocation(new Vector3f(0,0,32), true, client);
+
+        File worldPath = Paths.get(StoragePaths.SAVEGAME_DIR.toString(), this.getWorldName()).toFile();
+
+        if (!worldPath.exists()) {
+            worldPath.mkdirs();
+        }
+
 
     }
+
 
     @Override
     public Node getWorldNode() {

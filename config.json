@@ -1,0 +1,91 @@
+{
+  "terrainGenerator": {
+    "comment": "This is the settings for the Legacy terrainGenerator to generate terrain",
+    "useLegacy": true,
+    "ores": [
+      {
+        "name": "Iron",
+        "rarity": 1,
+        "minVeinSize": 12,
+        "maxVeinSize": 1,
+        "modelPath": "ironOre.fbx",
+        "texturePath": "ironOre.png"
+      }
+    ],
+    "terrain": {
+      "seed": 1234,
+      "size": {
+        "x": 512,
+        "y": 512
+      },
+      "heightMult": 2,
+      "scale": 0.25
+    },
+    "outFile": "worldFile.json"
+  },
+  "newTerrainGen": {
+    "comment": "New terrain generation thanks to jeyfella, link in README.",
+    "seed": 1234,
+    "saveFile": {
+      "saveWorld": true,
+      "saveFileName": "My Save",
+      "comment": "See StoragePaths to tweak where the save Files are located"
+    },
+    "antiStrophicFiltering": {
+      "level": 10
+    },
+    "storagePaths": {
+      "saveFilePath": "data/saves/",
+      "settingsPath": "data/settings/",
+      "modelsPath": "data/models",
+      "texturesPath": "data/textures"
+    },
+    "video": {
+      "maxRenderDistance": 12
+    },
+    "ores": [
+      {
+        "name": "Iron",
+        "rarity": 1,
+        "minVeinSize": 12,
+        "maxVeinSize": 1,
+        "modelPath": "ironOre.fbx",
+        "texturePath": "ironOre.png"
+      }
+    ]
+  },
+  "server": {
+    "comment": "This is the settings for the server, including max Players, IP, port, whitelist, blacklist",
+    "address": {
+      "ip": "localhost",
+      "port": 8080
+    },
+    "maxPlayers": 10,
+    "whitelist": {
+      "enabled": false,
+      "whitelistedUsers": [
+        {
+          "uid": 1,
+          "uname": "test"
+        }
+      ]
+    },
+    "blacklist": {
+      "enabled": true,
+      "blacklistedUsers": []
+    },
+    "idlePingTimeout": 30000,
+    "pingCheckInterval": 5000
+  },
+  "water": {
+    "sineAmmount": 10
+  },
+  "aws": {
+    "comment": "If not using AWS for heightmap sharing, set useAws to false, the server will then share the heightmap over the websocket connection (CAUTION: This requires a high bandwidth as the heightmap is a very large file and can easily be over a gigabyte)",
+    "useAws": true,
+    "bucketName": "",
+    "secretKey": "",
+    "accessKey": "",
+    "region": "us-east-2"
+  }
+}

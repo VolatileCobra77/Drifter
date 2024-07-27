@@ -16,3 +16,5 @@
 /Backups/
 
 local.properties
+/serverData/*
+/worldFile.json

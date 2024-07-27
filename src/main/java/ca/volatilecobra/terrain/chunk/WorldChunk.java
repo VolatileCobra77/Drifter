@@ -263,11 +263,19 @@ public class WorldChunk implements Chunk, Callable<Chunk> {
 
         long timeStart = System.currentTimeMillis();
 
-        try (FileOutputStream fout = new FileOutputStream(file); ObjectOutputStream oos = new ObjectOutputStream(fout)) {
-            oos.writeObject(this.densityVolume.getDenistyArray());
-        }
-        catch (IOException ex) {
-            log.error("Error saving chunk", ex);
+        while (true){
+            try (FileOutputStream fout = new FileOutputStream(file); ObjectOutputStream oos = new ObjectOutputStream(fout)) {
+                oos.writeObject(this.densityVolume.getDenistyArray());
+                break;
+            } catch (IOException ex) {
+                log.error("Error saving chunk, creating file");
+                try{
+                    file.createNewFile();
+                }catch(IOException ex1){
+                    log.error("Error creating file, aborting", ex1);
+                    System.exit(-1);
+                }
+            }
         }
 
         long timeEnd = System.currentTimeMillis();

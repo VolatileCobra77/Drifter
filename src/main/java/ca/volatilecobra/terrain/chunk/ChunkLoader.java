@@ -28,24 +28,6 @@ public class ChunkLoader {
         world.getAppContext().getAppStateManager().attach(this.chunkBuilder);
     }
 
-    public int calculateChunkSize(WorldChunk chunk) {
-        try {
-            // Serialize the chunk to JSON
-            Gson gson = new Gson();
-            String jsonString = gson.toJson(chunk);
-
-            // Measure the size of the serialized data in bytes
-            byte[] jsonData = jsonString.getBytes("UTF-8");
-            int sizeInBytes = jsonData.length;
-
-            System.out.println("Size of the chunk data in bytes: " + sizeInBytes);
-            return sizeInBytes;
-        } catch (UnsupportedEncodingException e) {
-            System.out.println("WARNING: An error occured seralizing a chunk to JSON");
-            e.printStackTrace();
-            return 0;
-        }
-    }
 
     public Chunk loadChunk(GridPosition gridPosition) {
 
@@ -71,7 +53,7 @@ public class ChunkLoader {
         chunk.setPriority(min);
 
         chunkBuilder.buildChunk(chunk);
-        calculateChunkSize(chunk);
+
         return chunk;
     }
 

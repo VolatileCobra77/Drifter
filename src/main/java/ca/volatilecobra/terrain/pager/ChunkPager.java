@@ -4,6 +4,7 @@ import ca.volatilecobra.terrain.chunk.Chunk;
 import ca.volatilecobra.terrain.chunk.GridPosition;
 import ca.volatilecobra.terrain.world.World;
 import com.jme3.math.Vector3f;
+import org.java_websocket.client.WebSocketClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,10 +33,12 @@ public class ChunkPager {
     private GridPosition lastGridPosition = new GridPosition(Integer.MAX_VALUE, Integer.MAX_VALUE, Integer.MAX_VALUE);
 
     public void setWorldLocation(Vector3f location) {
-        setWorldLocation(location, false);
+        setWorldLocation(location, false, null);
     }
 
-    public void setWorldLocation(Vector3f location, boolean forceReload) {
+    public void setWorldLocation(Vector3f location, boolean force) {setWorldLocation(location, force, null);}
+
+    public void setWorldLocation(Vector3f location, boolean forceReload, WebSocketClient client) {
 
         long timeStart = System.currentTimeMillis();
 
